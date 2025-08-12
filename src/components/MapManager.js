@@ -83,7 +83,7 @@ class MapManager {
     }
     
     this.isLoading = true;
-    console.log(`🗺️ Loading map: ${id}`);
+    // Loading map...
     
     try {
       const gltf = await this.loadGLTF(mapData.modelPath);
@@ -300,7 +300,7 @@ class MapManager {
    * @param {string} mapId2 - Second map identifier
    */
   async loadBothMaps(mapId1, mapId2) {
-    console.log(`🗺️ Loading both maps: ${mapId1}, ${mapId2}`);
+    // Loading both maps...
     
     try {
       // Load both maps in parallel

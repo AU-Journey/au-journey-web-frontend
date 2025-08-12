@@ -215,7 +215,6 @@ function applyMeshBatching(meshGroups, scene) {
   for (const [materialKey, meshes] of meshGroups) {
     // Only batch if we have multiple similar meshes
     if (meshes.length > 3) {
-      console.log(`🔧 Batching ${meshes.length} meshes with material: ${materialKey}`);
       // Note: In a real implementation, you'd merge geometries here
       // This is a placeholder for actual geometry merging logic
       batchMeshes(meshes, scene);

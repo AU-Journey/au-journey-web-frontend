@@ -163,7 +163,7 @@ class SchoolMap {
       this.mapManager.registerMap('school_map2', 'school_map2.glb');
       
       // Load both maps and add them to the scene
-      console.log('🗺️ Loading both map models...');
+      // Loading both map models...
       await this.mapManager.loadBothMaps('school_map', 'school_map2');
       
       // Apply scene optimizations after maps are loaded
@@ -191,7 +191,7 @@ class SchoolMap {
         }
       });
       
-      console.log('🗺️ Both maps loaded - Press M to toggle, 1/2/3 for specific maps');
+      // Both maps loaded - Press M to toggle, 1/2/3 for specific maps
       
     } catch (error) {
       console.error('❌ Failed to initialize maps:', error);
@@ -211,17 +211,17 @@ class SchoolMap {
         // Both visible → show only map1
         map1.model.visible = true;
         map2.model.visible = false;
-        console.log('🗺️ Showing only school_map');
+        // Showing only school_map
       } else if (map1.model.visible && !map2.model.visible) {
         // Map1 only → show only map2
         map1.model.visible = false;
         map2.model.visible = true;
-        console.log('🗺️ Showing only school_map2');
+        // Showing only school_map2
       } else {
         // Map2 only or neither → show both
         map1.model.visible = true;
         map2.model.visible = true;
-        console.log('🗺️ Showing both maps');
+        // Showing both maps
       }
     }
   }
@@ -232,7 +232,7 @@ class SchoolMap {
     
     if (map && map.model) {
       map.model.visible = visible;
-      console.log(`🗺️ ${mapId} visibility set to ${visible}`);
+      // Map visibility updated
     }
   }
 
@@ -297,17 +297,26 @@ class SchoolMap {
   setupMemoryManagement() {
     // Set up memory event handlers
     this.memoryManager.onMemoryEvent('warning', (data) => {
-      console.warn('⚠️ Memory Warning:', data.message);
+      // Memory warning - silent in production
+      if (import.meta.env.DEV) {
+        console.warn('⚠️ Memory Warning:', data.message);
+      }
     });
     
     this.memoryManager.onMemoryEvent('critical', (data) => {
-      console.error('🚨 Critical Memory Usage:', data.message);
+      // Critical memory usage - keep for production monitoring
+      if (import.meta.env.DEV) {
+        console.error('🚨 Critical Memory Usage:', data.message);
+      }
       // Could trigger emergency cleanup here
       this.performEmergencyCleanup();
     });
     
     this.memoryManager.onMemoryEvent('leak', (data) => {
-      console.error('🕳️ Memory Leak Detected:', data.message);
+      // Memory leak detection - keep for production monitoring
+      if (import.meta.env.DEV) {
+        console.error('🕳️ Memory Leak Detected:', data.message);
+      }
     });
     
     // Add keyboard shortcut for memory stats
@@ -319,7 +328,7 @@ class SchoolMap {
   }
   
   performEmergencyCleanup() {
-    console.log('🚨 Performing emergency cleanup...');
+    // Performing emergency cleanup...
     
     // Force garbage collection if available
     this.memoryManager.forceGarbageCollection();
@@ -334,16 +343,20 @@ class SchoolMap {
     // Reduce weather update frequency
     this.weatherUpdateInterval = 10000; // Increase to 10 seconds
     
-    console.log('✅ Emergency cleanup completed');
+    // Emergency cleanup completed
   }
   
   logMemoryStats() {
     const stats = this.memoryManager.getStats();
-    console.log('📊 Memory Statistics:', stats);
+    if (import.meta.env.DEV) {
+      console.log('📊 Memory Statistics:', stats);
+    }
     
     const perfStats = this.performanceMonitor?.stats;
     if (perfStats) {
-      console.log('⚡ Performance Statistics:', perfStats);
+      if (import.meta.env.DEV) {
+        console.log('⚡ Performance Statistics:', perfStats);
+      }
     }
   }
 
@@ -393,13 +406,13 @@ class SchoolMap {
 
   // Method to update tram position from live GPS (legacy method - Redis is now primary)
   updateTramPositionFromLiveGPS(lat, lon) {
-    console.log('📍 Legacy GPS update called - Redis is now primary data source');
+    // Legacy GPS update called - Redis is now primary data source
     
     // This method is primarily for fallback when Redis is unavailable
     if (this.tramMovement) {
       const redisStatus = this.tramMovement.getRedisStatus();
       if (!redisStatus.isConnected) {
-        console.log('🔄 Using legacy GPS update as Redis fallback');
+        // Using legacy GPS update as Redis fallback
         this.tramMovement.updateFromLiveGPS(lat, lon);
       }
     }
@@ -431,14 +444,14 @@ class SchoolMap {
       gpsConfig
     );
     
-    console.log('🚊 TramMovement initialized with Redis integration');
+    // TramMovement initialized with Redis integration
     
     // Wait a moment for initial positioning to complete
     setTimeout(() => {
       if (this.tramMovement && this.tramMovement.lastKnownPosition) {
         this.focusCameraOnTram();
         this.cameraFocused = true;
-        console.log('📷 Initial camera focus completed');
+        // Initial camera focus completed
       }
     }, 2000); // Give time for Redis data to arrive and position tram
   }
@@ -540,7 +553,9 @@ class SchoolMap {
       // Show connection warning if disconnected for more than 10 seconds
       const disconnectedTime = Date.now() - progress.lastConnectionLoss;
       if (disconnectedTime > 10000) {
-        console.warn('⚠️ WebSocket connection lost for', Math.floor(disconnectedTime / 1000), 'seconds');
+        if (import.meta.env.DEV) {
+          console.warn('⚠️ WebSocket connection lost for', Math.floor(disconnectedTime / 1000), 'seconds');
+        }
       }
     }
 
@@ -556,7 +571,7 @@ class SchoolMap {
       if (!this.cameraFocused && this.tramMovement.lastKnownPosition) {
         this.focusCameraOnTram();
         this.cameraFocused = true;
-        console.log('📷 Camera focused on tram at GPS position');
+        // Camera focused on tram at GPS position
       }
     } else if (progress.realTimeMode === false && this.gpsPoints && progress.currentIndex < this.gpsPoints.length) {
       // Fallback to static GPS points if WebSocket is unavailable
@@ -596,7 +611,9 @@ class SchoolMap {
       this.tramDebugUI.updateStatus(debugData);
       
     } catch (error) {
-      console.warn('⚠️ Debug UI update failed:', error);
+      if (import.meta.env.DEV) {
+        console.warn('⚠️ Debug UI update failed:', error);
+      }
     }
   }
   
@@ -656,7 +673,7 @@ class SchoolMap {
       this.memoryManager = null;
     }
     
-    console.log('🧹 SchoolMap resources disposed');
+    // SchoolMap resources disposed
   }
 }
 
