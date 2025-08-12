@@ -2,7 +2,7 @@ name: au-journey-web-frontend
 static_sites:
 - name: web
   git:
-    repo_clone_url: https://github.com/your-username/au-journey-web-frontend.git
+    repo_clone_url: https://github.com/AU-Journey/au-journey-web-frontend.git
     branch: main
   build_command: npm run build
   output_dir: /dist
