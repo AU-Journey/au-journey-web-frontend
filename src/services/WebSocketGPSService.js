@@ -45,7 +45,7 @@ class WebSocketGPSService {
       const hostname = window.location.hostname;
       
       if (hostname === 'localhost') {
-        return 'ws://localhost:3000';
+        return 'ws://localhost:8080';  // Changed from 3000 to 8080
       } else {
         // Production: Use environment variable first
         const backendUrl = import.meta.env.VITE_BACKEND_URL;
@@ -59,7 +59,7 @@ class WebSocketGPSService {
         return `${protocol}//au-journey-web-backend-gk6n3.ondigitalocean.app`;
       }
     }
-    return 'ws://localhost:3000';
+    return 'ws://localhost:8080';  // Changed from 3000 to 8080
   }
   
   connect() {
