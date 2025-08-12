@@ -1,0 +1,20 @@
+name: au-journey-web-frontend
+services:
+- environment_slug: static-site
+  git:
+    branch: main
+    repo_clone_url: https://github.com/AU-Journey/au-journey-web-frontend.git
+  name: web
+  routes:
+  - path: /
+  run_command: npm run build
+  source_dir: /
+  static_sites:
+  - build_command: npm run build
+    environment_slug: static-site
+    git:
+      branch: main
+      repo_clone_url: https://github.com/AU-Journey/au-journey-web-frontend.git
+    name: web
+    output_dir: /dist
+    source_dir: /
