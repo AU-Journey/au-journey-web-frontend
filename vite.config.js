@@ -2,9 +2,13 @@ import { defineConfig } from 'vite'
 import { resolve } from 'path'
 
 export default defineConfig(({ command, mode }) => {
-  // For DigitalOcean static site deployment, use root path
-  // This works for both local development and production
-  const base = '/'
+  // Get deployment target from environment variable or default to 'digitalocean'
+  const deployTarget = process.env.DEPLOY_TARGET || 'digitalocean'
+  
+  // Set base path based on deployment target
+  const base = mode === 'production' 
+    ? deployTarget === 'docker' ? '/journey/api/' : '/'
+    : '/'
   
   console.log(`Building with base path: ${base} (mode: ${mode})`)
   
