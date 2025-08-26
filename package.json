@@ -13,11 +13,12 @@
     "test:websocket": "node test-websocket-client.js"
   },
   "devDependencies": {
+    "terser": "^5.43.1",
     "vite": "^6.3.5"
   },
   "dependencies": {
     "gsap": "^3.13.0",
-    "three": "^0.177.0",
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "three": "^0.177.0"
   }
 }
