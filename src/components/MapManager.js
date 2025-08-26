@@ -10,6 +10,7 @@ class MapManager {
   constructor(scene) {
     this.scene = scene;
     this.loader = new GLTFLoader();
+    this.loader.setPath(import.meta.env.BASE_URL || '/');
     
     // Map registry
     this.maps = new Map();
@@ -19,16 +20,28 @@ class MapManager {
     // Loading state
     this.isLoading = false;
     this.loadQueue = [];
+    this.loadingProgress = 0;
+    
+    // Progressive loading
+    this.initialLoadComplete = false;
+    this.loadingManager = new THREE.LoadingManager();
+    this.setupLoadingManager();
     
     // Configuration
     this.baseUrl = import.meta.env.BASE_URL || '/';
-    this.cacheBuster = typeof __MODEL_CACHE_BUST__ !== 'undefined' ? __MODEL_CACHE_BUST__ : Date.now();
+    // Only use cache busting in development
+    this.cacheBuster = import.meta.env.DEV ? Date.now() : '';
     
-    // Default map configuration
+    // Default map configuration with LOD levels
     this.defaultMapConfig = {
       scale: { x: 0.908, y: 0.908, z: 0.908 },
       rotation: { x: 0, y: MathUtils.degToRad(165), z: 0 },
-      position: { x: -300, y: 0, z: 220 }
+      position: { x: -300, y: 0, z: 220 },
+      lodLevels: [
+        { distance: 0, detail: 'high' },
+        { distance: 50, detail: 'medium' },
+        { distance: 100, detail: 'low' }
+      ]
     };
   }
   
@@ -39,15 +52,35 @@ class MapManager {
    * @param {Object} config - Optional position/rotation/scale overrides
    * @param {boolean} preload - Whether to load immediately
    */
+  setupLoadingManager() {
+    this.loadingManager.onProgress = (url, loaded, total) => {
+      this.loadingProgress = (loaded / total) * 100;
+      if (this.onLoadingProgress) {
+        this.onLoadingProgress(this.loadingProgress);
+      }
+    };
+    
+    this.loadingManager.onLoad = () => {
+      this.initialLoadComplete = true;
+      if (this.onLoadComplete) {
+        this.onLoadComplete();
+      }
+    };
+    
+    this.loader = new GLTFLoader(this.loadingManager);
+  }
+
   registerMap(id, filename, config = {}, preload = false) {
     const mapConfig = {
       id,
       filename,
-      modelPath: `${this.baseUrl}models/${filename}?v=${this.cacheBuster}`,
+      modelPath: `${this.baseUrl}models/${filename}${this.cacheBuster ? `?v=${this.cacheBuster}` : ''}`,
       config: { ...this.defaultMapConfig, ...config },
       loaded: false,
       model: null,
-      inScene: false
+      inScene: false,
+      // Add LOD support
+      lods: {}
     };
     
     this.maps.set(id, mapConfig);

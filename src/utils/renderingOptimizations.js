@@ -8,19 +8,32 @@ import { PCFSoftShadowMap, LOD, Object3D, Mesh, Group } from 'three';
  * @param {WebGLRenderer} renderer - Three.js renderer instance
  */
 export function optimizeRenderer(renderer) {
-  // Enable hardware acceleration
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap at 2 for performance
+  // Adaptive quality based on device performance
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const performanceRatio = isMobile ? 1 : Math.min(window.devicePixelRatio, 2);
+  renderer.setPixelRatio(performanceRatio);
   
-  // Shadow optimizations
+  // Progressive enhancement of shadows
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
-  renderer.shadowMap.autoUpdate = true; // Keep auto-update enabled for proper lighting
+  renderer.shadowMap.autoUpdate = false; // Only update shadows when needed
   
-  // Additional optimizations
+  // Optimize for initial load
   renderer.powerPreference = "high-performance";
-  renderer.antialias = true;
-  renderer.stencil = false; // Disable if not needed
+  renderer.antialias = !isMobile; // Disable antialiasing on mobile
+  renderer.stencil = false;
   renderer.depth = true;
+  
+  // Enable texture compression
+  renderer.capabilities.getMaxAnisotropy();
+  
+  // Set smaller canvas size initially, then scale up
+  const initialScale = 0.75;
+  renderer.setSize(
+    window.innerWidth * initialScale,
+    window.innerHeight * initialScale,
+    false
+  );
 }
 
 /**

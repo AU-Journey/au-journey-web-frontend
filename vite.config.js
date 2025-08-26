@@ -17,12 +17,29 @@ export default defineConfig(({ command, mode }) => {
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
+      // Enable compression and chunking optimizations
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true
+        }
+      },
+      chunkSizeWarningLimit: 1000,
       rollupOptions: {
         input: {
           main: resolve(__dirname, 'index.html'),
         },
         output: {
-          // Ensure proper chunking and asset handling
+          // Optimize chunking for better caching
+          manualChunks(id) {
+            if (id.includes('node_modules/three')) {
+              return 'three-vendor';
+            }
+            if (id.includes('node_modules')) {
+              return 'vendor';
+            }
+          },
           chunkFileNames: 'assets/js/[name]-[hash].js',
           entryFileNames: 'assets/js/[name]-[hash].js',
           assetFileNames: 'assets/[ext]/[name]-[hash].[ext]'
