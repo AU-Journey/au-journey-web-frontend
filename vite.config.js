@@ -7,7 +7,7 @@ export default defineConfig(({ command, mode }) => {
   
   // Set base path based on deployment target
   const base = mode === 'production' 
-    ? deployTarget === 'docker' ? '/journey/api/' : '/'
+    ? deployTarget === 'docker' ? '/journey/' : '/'
     : '/'
   
   console.log(`Building with base path: ${base} (mode: ${mode})`)

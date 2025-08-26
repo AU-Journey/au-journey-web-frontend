@@ -1,6 +1,6 @@
 # Deployment Guide for AU Journey Web Frontend
 
-This guide explains how to deploy the AU Journey Web Frontend application using Docker to serve at `https://life.au.edu/journey/api`.
+This guide explains how to deploy the AU Journey Web Frontend application using Docker to serve at `https://life.au.edu/journey`.
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ docker run -d \
 Add the following configuration to your Nginx server block (typically in `/etc/nginx/sites-available/default` or similar):
 
 ```nginx
-location /journey/api {
+location /journey {
     proxy_pass http://localhost:8080;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -108,7 +108,7 @@ docker run -d \
 ## Verification
 
 After deployment, the application should be accessible at:
-- URL: `https://life.au.edu/journey/api`
+- URL: `https://life.au.edu/journey`
 
 ## Troubleshooting
 
