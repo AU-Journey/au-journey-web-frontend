@@ -3,7 +3,7 @@
  * Handles loading, switching, and memory optimization for map resources
  */
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import { MathUtils, DoubleSide } from 'three';
+import { MathUtils, DoubleSide, LoadingManager } from 'three';
 import { optimizeMaterial, disposeObject } from '../utils/renderingOptimizations.js';
 
 class MapManager {
@@ -24,7 +24,7 @@ class MapManager {
     
     // Progressive loading
     this.initialLoadComplete = false;
-    this.loadingManager = new THREE.LoadingManager();
+    this.loadingManager = new LoadingManager();
     this.setupLoadingManager();
     
     // Configuration
