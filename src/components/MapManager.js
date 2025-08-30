@@ -5,12 +5,13 @@
  * - Byte-accurate progress reporting (for LoadingUI)
  * - Optional KTX2 (BasisU) textures + DRACO geometry support
  * - Safe swapping/disposing when upgrading quality
- * - **Hard-coded sequence**: load `school_map.glb` first, then `school_map_2.glb`
+ * - **Hard-coded sequence**: load `school_map.glb` first, then `school_map2.glb`
  */
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
-import { MathUtils, DoubleSide, LoadingManager, LinearFilter } from 'three';
+import { MathUtils, DoubleSide, LoadingManager } from 'three';
 import { optimizeMaterial, disposeObject } from '../utils/renderingOptimizations.js';
 
 class MapManager {
@@ -39,9 +40,8 @@ class MapManager {
     this.saveData = !!conn.saveData;
 
     const netLimited = ['slow-2g', '2g', '3g'].includes(this.netType) || this.saveData;
-    this.MAX_CONCURRENCY = typeof opts.maxConcurrency === 'number'
-      ? opts.maxConcurrency
-      : (netLimited ? 2 : 4);
+    this.MAX_CONCURRENCY =
+      typeof opts.maxConcurrency === 'number' ? opts.maxConcurrency : netLimited ? 2 : 4;
 
     // ---- Base/config ----
     this.baseUrl = (opts.baseUrl ?? (import.meta?.env?.BASE_URL || '/')) || '/';
@@ -58,8 +58,16 @@ class MapManager {
       rotation: { x: 0, y: MathUtils.degToRad(165), z: 0 },
       position: { x: -300, y: 0, z: 220 },
       lodLevels: this.isMobile
-        ? [ { distance: 0, detail: 'medium' }, { distance: 30, detail: 'low' }, { distance: 60, detail: 'hidden' } ]
-        : [ { distance: 0, detail: 'high' }, { distance: 50, detail: 'medium' }, { distance: 100, detail: 'low' } ]
+        ? [
+            { distance: 0, detail: 'medium' },
+            { distance: 30, detail: 'low' },
+            { distance: 60, detail: 'hidden' }
+          ]
+        : [
+            { distance: 0, detail: 'high' },
+            { distance: 50, detail: 'medium' },
+            { distance: 100, detail: 'low' }
+          ]
     };
 
     // ---- Loading state ----
@@ -68,7 +76,7 @@ class MapManager {
     this.activeMapId = null;
 
     this.globalLoadedBytes = 0; // across all current fetches
-    this.globalTotalBytes = 0;  // sum of content-lengths we've learned
+    this.globalTotalBytes = 0; // sum of content-lengths we've learned
 
     // fetch queue (priority ascending)
     this.queue = []; // items: { id, variant, priority, resolve, reject, controller }
@@ -86,12 +94,16 @@ class MapManager {
       const ktx2 = new KTX2Loader().setTranscoderPath(this.ktx2Path);
       if (opts.renderer) ktx2.detectSupport(opts.renderer);
       this.loader.setKTX2Loader(ktx2);
-    } catch {}
+    } catch {
+      // KTX2 optional
+    }
 
     try {
       const draco = new DRACOLoader().setDecoderPath(this.dracoPath);
       this.loader.setDRACOLoader(draco);
-    } catch {}
+    } catch {
+      // DRACO optional
+    }
   }
 
   // ---------- Public events you can assign from outside ----------
@@ -118,12 +130,13 @@ class MapManager {
    */
   registerMap(id, filenameOrVariants, config = {}, preload = false) {
     // Support old signature: filename string
-    const variants = (typeof filenameOrVariants === 'string')
-      ? { high: filenameOrVariants }
-      : { ...filenameOrVariants };
+    const variants =
+      typeof filenameOrVariants === 'string'
+        ? { high: filenameOrVariants }
+        : { ...filenameOrVariants };
 
     const modelPaths = {};
-    for (const k of ['low','medium','high']) {
+    for (const k of ['low', 'medium', 'high']) {
       if (variants[k]) {
         // always load from /models/
         modelPaths[k] = `${this.baseUrl}models/${variants[k]}${this.cacheBuster}`;
@@ -132,7 +145,7 @@ class MapManager {
 
     const mapConfig = {
       id,
-      variants: modelPaths,           // { low, medium, high }
+      variants: modelPaths, // { low, medium, high }
       filename: variants.high || variants.medium || variants.low || null, // for backward compat
       modelPath: modelPaths.high || null, // kept for compat (primary)
       config: { ...this.defaultMapConfig, ...config },
@@ -140,14 +153,14 @@ class MapManager {
       model: null,
       inScene: false,
       currentVariant: null,
-      upgradeToken: 0, // to cancel stale upgrades
+      upgradeToken: 0 // to cancel stale upgrades
     };
 
     this.maps.set(id, mapConfig);
 
     if (preload) {
       // Start with a safe initial quality (network-aware)
-      this.loadMap(id, { progressive: true }).catch(()=>{});
+      this.loadMap(id, { progressive: true }).catch(() => {});
     }
 
     return mapConfig;
@@ -157,13 +170,13 @@ class MapManager {
   _chooseInitialVariant(mapData, requested = 'auto') {
     if (requested && requested !== 'auto') return requested;
 
-    const has = (v)=> !!mapData.variants[v];
+    const has = (v) => !!mapData.variants[v];
     const netLimited = ['slow-2g', '2g', '3g'].includes(this.netType) || this.saveData;
 
     if (this.isMobile || netLimited) {
-      return has('medium') ? 'medium' : (has('low') ? 'low' : 'high');
+      return has('medium') ? 'medium' : has('low') ? 'low' : 'high';
     }
-    return has('high') ? 'high' : (has('medium') ? 'medium' : 'low');
+    return has('high') ? 'high' : has('medium') ? 'medium' : 'low';
   }
 
   _nextHigherVariant(v) {
@@ -188,7 +201,8 @@ class MapManager {
     if (mapData.inScene && mapData.model) return mapData.model;
 
     const initial = this._chooseInitialVariant(mapData, opts.quality || 'auto');
-    if (!mapData.variants[initial]) throw new Error(`No available asset for initial variant '${initial}' of map '${id}'`);
+    if (!mapData.variants[initial])
+      throw new Error(`No available asset for initial variant '${initial}' of map '${id}'`);
 
     const priority = opts.priority ?? 1;
     const token = ++mapData.upgradeToken; // invalidate older operations
@@ -198,20 +212,25 @@ class MapManager {
     if (token !== mapData.upgradeToken) return first; // superseded
 
     // Mark as current
-    this._attachVariant(mapData, first, initial, /*upgrade*/false);
+    this._attachVariant(mapData, first, initial, /*upgrade*/ false);
 
     // --- Hard-coded sequence: if we just attached the PRIMARY, start loading SECONDARY ---
     if (id === this.primaryId) {
       const sec = this.maps.get(this.secondaryId);
       if (sec && !sec.loaded) {
         // schedule with lower priority so it never blocks first render
-        this._enqueue({ id: this.secondaryId, variant: this._chooseInitialVariant(sec, 'auto'), priority: priority + 1 });
+        this._enqueue({
+          id: this.secondaryId,
+          variant: this._chooseInitialVariant(sec, 'auto'),
+          priority: priority + 1
+        });
       }
     }
 
     // Optional progressive upgrades for the map we just loaded
     if (opts.progressive !== false) {
-      let v = initial, next;
+      let v = initial,
+        next;
       while ((next = this._nextHigherVariant(v)) && mapData.variants[next]) {
         // fire-and-forget upgrades, in priority order (lower priority number = earlier)
         this._enqueue({ id, variant: next, priority: priority + 1 });
@@ -249,7 +268,7 @@ class MapManager {
    * Preload a set of maps (does not attach to scene). Respects concurrency.
    */
   async preloadMaps(mapIds) {
-    const tasks = mapIds.map(id => this.loadMap(id, { progressive: true }));
+    const tasks = mapIds.map((id) => this.loadMap(id, { progressive: true }));
     await Promise.allSettled(tasks);
   }
 
@@ -260,12 +279,12 @@ class MapManager {
     // Abort controller for stream fetch
     job.controller = new AbortController();
     this.queue.push(job);
-    this.queue.sort((a,b)=> (a.priority??0) - (b.priority??0));
+    this.queue.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
     this._pump();
   }
 
   _enqueueAndAwait({ id, variant, priority }) {
-    return new Promise((resolve, reject)=>{
+    return new Promise((resolve, reject) => {
       this._enqueue({ id, variant, priority, resolve, reject });
     });
   }
@@ -286,7 +305,9 @@ class MapManager {
           if (job.resolve) job.resolve(gltf.scene || gltf.scenes?.[0]);
           return gltf;
         })
-        .catch((err) => { if (job.reject) job.reject(err); })
+        .catch((err) => {
+          if (job.reject) job.reject(err);
+        })
         .finally(() => {
           this.active.delete(job);
           this._pump();
@@ -351,7 +372,7 @@ class MapManager {
     // Apply transforms
     this._applyMapConfiguration(node, mapData.config);
 
-    // Optimize materials/meshes (mobile-aware)
+    // Optimize materials/meshes (mobile-aware, crisp textures)
     this._optimizeMapModel(node);
 
     // If upgrading, replace old model cleanly
@@ -376,42 +397,75 @@ class MapManager {
     model.position.set(config.position.x, config.position.y, config.position.z);
   }
 
+  /**
+   * IMPORTANT: keep textures sharp (mipmaps+trilinear+anisotropy) and only enable transparency if needed.
+   */
   _optimizeMapModel(root) {
     const isMobile = this.isMobile;
+
     root.traverse((child) => {
       if (!child.isMesh || !child.material) return;
 
-      // Mobile-friendly texture sampling
-      if (isMobile && child.material.map) {
-        child.material.map.generateMipmaps = false; // faster upload, lower memory
-        child.material.map.minFilter = LinearFilter;
-        child.material.map.magFilter = LinearFilter;
-        // keep anisotropy low
-        if (typeof child.material.map.anisotropy === 'number') {
-          child.material.map.anisotropy = Math.min(2, child.material.map.anisotropy || 1);
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => {
+        // --- Base color / albedo (sRGB) ---
+        if (m.map) {
+          const tex = m.map;
+          if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+          tex.generateMipmaps = true;
+          tex.minFilter = THREE.LinearMipmapLinearFilter; // trilinear
+          tex.magFilter = THREE.LinearFilter;
+          tex.anisotropy = isMobile ? 4 : 8;
+          tex.needsUpdate = true;
         }
-      }
 
-      // Disable costly secondary maps on mobile
-      if (isMobile) {
-        child.material.envMap = null;
-        child.material.lightMap = null;
-      }
+        // --- Other maps (linear) ---
+        ['normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'lightMap'].forEach(
+          (k) => {
+            const tex = m[k];
+            if (!tex) return;
+            tex.generateMipmaps = true;
+            tex.minFilter = THREE.LinearMipmapLinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.anisotropy = isMobile ? 4 : 8;
+            tex.needsUpdate = true;
+          }
+        );
 
-      // Transparent/foliage tweaks
-      const m = child.material;
-      if (m.transparent || (m.alphaMap || (m.map && m.alphaTest > 0))) {
-        m.alphaTest = isMobile ? 0.2 : 0.1;
-        m.depthWrite = true;
-        m.side = DoubleSide;
-        m.transparent = true;
-        m.opacity = isMobile ? 0.95 : 0.98;
-        m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
-      } else {
-        m.transparent = false; m.opacity = 1.0;
-      }
+        // --- Transparency only when necessary ---
+        const wantsTransparency =
+          !!m.transparent || !!m.alphaMap || (m.opacity != null && m.opacity < 1.0);
+        if (wantsTransparency) {
+          m.transparent = true;
+          // Prefer alphaTest for foliage/decals (cheaper than full blending)
+          if (m.alphaTest == null) m.alphaTest = isMobile ? 0.2 : 0.1;
+          m.depthWrite = m.alphaTest < 0.5; // keep depth write when using cutout
+          // Don’t force opacity lower than 1 unless asset authoring requires it
+          if (m.opacity == null) m.opacity = 1.0;
+          // Only force DoubleSide if you *know* your asset needs it (e.g., leaves)
+          // m.side = DoubleSide;
+          // Slight polygon offset to mitigate z-fighting for thin decals/foliage
+          m.polygonOffset = true;
+          m.polygonOffsetFactor = 1;
+          m.polygonOffsetUnits = 1;
+        } else {
+          m.transparent = false;
+          m.opacity = 1.0;
+          m.depthWrite = true;
+        }
 
-      optimizeMaterial(m);
+        // Disable some extras on mobile
+        if (isMobile) {
+          m.envMap = null;
+          m.lightMap = m.lightMap || null;
+        }
+
+        // Your existing micro-opts
+        try {
+          optimizeMaterial(m);
+        } catch {}
+        m.needsUpdate = true;
+      });
 
       // Shadows – off on mobile for perf
       child.receiveShadow = !isMobile;
@@ -420,10 +474,11 @@ class MapManager {
       // Mark static objects
       if (!child.name.includes('dynamic') && !child.name.includes('animated')) {
         child.userData.static = true;
-        child.matrixAutoUpdate = false; child.updateMatrix();
+        child.matrixAutoUpdate = false;
+        child.updateMatrix();
       }
 
-      // Simple distance culling hint for your camera loop (optional)
+      // Distance culling hint
       if (isMobile) {
         child.userData.maxRenderDistance = child.userData.maxRenderDistance || 80;
       }
@@ -445,11 +500,18 @@ class MapManager {
     mapData.model = null;
     mapData.loaded = false;
     mapData.currentVariant = null;
-    if (this.activeMapId === id) { this.currentMap = null; this.activeMapId = null; }
+    if (this.activeMapId === id) {
+      this.currentMap = null;
+      this.activeMapId = null;
+    }
   }
 
-  getCurrentMap() { return { id: this.activeMapId, model: this.currentMap }; }
-  getAllMaps() { return this.maps; }
+  getCurrentMap() {
+    return { id: this.activeMapId, model: this.currentMap };
+  }
+  getAllMaps() {
+    return this.maps;
+  }
 
   /**
    * Load two maps and show both (kept for compatibility). Upgrades still happen progressively.
@@ -463,10 +525,17 @@ class MapManager {
     const mapData1 = this.maps.get(mapId1);
     const mapData2 = this.maps.get(mapId2);
 
-    if (mapData1 && !mapData1.inScene) { this.scene.add(mapData1.model); mapData1.inScene = true; }
-    if (mapData2 && !mapData2.inScene) { this.scene.add(mapData2.model); mapData2.inScene = true; }
+    if (mapData1 && !mapData1.inScene) {
+      this.scene.add(mapData1.model);
+      mapData1.inScene = true;
+    }
+    if (mapData2 && !mapData2.inScene) {
+      this.scene.add(mapData2.model);
+      mapData2.inScene = true;
+    }
 
-    this.currentMap = m1; this.activeMapId = mapId1;
+    this.currentMap = m1;
+    this.activeMapId = mapId1;
     return { map1: m1, map2: m2 };
   }
 
@@ -486,9 +555,13 @@ class MapManager {
       if (child.geometry) memoryManager.track(child.geometry, 'geometry');
       const mat = child.material;
       if (Array.isArray(mat)) {
-        mat.forEach((mm) => { memoryManager.track(mm, 'material'); if (mm?.map) memoryManager.track(mm.map, 'texture'); });
+        mat.forEach((mm) => {
+          memoryManager.track(mm, 'material');
+          if (mm?.map) memoryManager.track(mm.map, 'texture');
+        });
       } else if (mat) {
-        memoryManager.track(mat, 'material'); if (mat.map) memoryManager.track(mat.map, 'texture');
+        memoryManager.track(mat, 'material');
+        if (mat.map) memoryManager.track(mat.map, 'texture');
       }
     });
   }
@@ -496,13 +569,15 @@ class MapManager {
   /** Dispose all maps & cancel pending */
   dispose() {
     // Abort any in-flight fetches
-    this.queue.forEach(j => j.controller?.abort?.());
-    this.active.forEach(j => j.controller?.abort?.());
-    this.queue = []; this.active.clear();
+    this.queue.forEach((j) => j.controller?.abort?.());
+    this.active.forEach((j) => j.controller?.abort?.());
+    this.queue = [];
+    this.active.clear();
 
     for (const [id] of this.maps) this.unloadMap(id);
     this.maps.clear();
-    this.currentMap = null; this.activeMapId = null;
+    this.currentMap = null;
+    this.activeMapId = null;
   }
 }
 
