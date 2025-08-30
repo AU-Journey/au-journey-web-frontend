@@ -3,7 +3,7 @@
  * Handles loading, switching, and memory optimization for map resources
  */
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import { MathUtils, DoubleSide, LoadingManager } from 'three';
+import { MathUtils, DoubleSide, LoadingManager, LinearFilter } from 'three';
 import { optimizeMaterial, disposeObject } from '../utils/renderingOptimizations.js';
 
 class MapManager {
@@ -11,6 +11,9 @@ class MapManager {
     this.scene = scene;
     this.loader = new GLTFLoader();
     this.loader.setPath(import.meta.env.BASE_URL || '/');
+    
+    // Detect mobile device for optimizations
+    this.isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
     // Map registry
     this.maps = new Map();
@@ -32,12 +35,19 @@ class MapManager {
     // Only use cache busting in development
     this.cacheBuster = import.meta.env.DEV ? Date.now() : '';
     
+    // Mobile-optimized default map configuration
+    const mobileScale = this.isMobile ? 0.8 : 0.908; // Slightly smaller on mobile
+    
     // Default map configuration with LOD levels
     this.defaultMapConfig = {
-      scale: { x: 0.908, y: 0.908, z: 0.908 },
+      scale: { x: mobileScale, y: mobileScale, z: mobileScale },
       rotation: { x: 0, y: MathUtils.degToRad(165), z: 0 },
       position: { x: -300, y: 0, z: 220 },
-      lodLevels: [
+      lodLevels: this.isMobile ? [
+        { distance: 0, detail: 'medium' }, // Start with medium detail on mobile
+        { distance: 30, detail: 'low' },   // Switch to low detail sooner
+        { distance: 60, detail: 'hidden' } // Hide distant objects sooner
+      ] : [
         { distance: 0, detail: 'high' },
         { distance: 50, detail: 'medium' },
         { distance: 100, detail: 'low' }
@@ -93,7 +103,7 @@ class MapManager {
   }
   
   /**
-   * Load a map model
+   * Load a map model with mobile optimizations
    * @param {string} id - Map identifier
    * @returns {Promise} - Resolves when map is loaded
    */
@@ -116,7 +126,11 @@ class MapManager {
     }
     
     this.isLoading = true;
-    // Loading map...
+    
+    // Show progressive loading feedback for mobile
+    if (this.isMobile && this.onLoadingProgress) {
+      this.onLoadingProgress(0);
+    }
     
     try {
       const gltf = await this.loadGLTF(mapData.modelPath);
@@ -126,7 +140,7 @@ class MapManager {
       // Apply configuration
       this.applyMapConfiguration(mapData);
       
-      // Optimize the model
+      // Optimize the model with mobile-specific settings
       this.optimizeMapModel(mapData.model);
       
       // Track geometries and materials for memory management if scene has memoryManager
@@ -183,18 +197,32 @@ class MapManager {
   }
   
   /**
-   * Optimize map model for performance
+   * Optimize map model for performance with mobile-specific settings
    */
   optimizeMapModel(model) {
     model.traverse((child) => {
       if (child.isMesh && child.material) {
+        // Mobile-specific material optimization
+        if (this.isMobile) {
+          // Reduce texture quality on mobile
+          if (child.material.map) {
+            child.material.map.generateMipmaps = false;
+            child.material.map.minFilter = LinearFilter;
+            child.material.map.magFilter = LinearFilter;
+          }
+          
+          // Disable expensive features on mobile
+          child.material.envMap = null;
+          child.material.lightMap = null;
+        }
+        
         // Enhanced grass/transparent material fix
         if (child.material.transparent || (child.material.map && child.material.alphaMap)) {
-          child.material.alphaTest = 0.1;
+          child.material.alphaTest = this.isMobile ? 0.2 : 0.1; // Higher alpha test on mobile
           child.material.depthWrite = true;
           child.material.side = DoubleSide;
           child.material.transparent = true;
-          child.material.opacity = 0.98;
+          child.material.opacity = this.isMobile ? 0.95 : 0.98;
           
           // Prevent z-fighting
           child.material.polygonOffset = true;
@@ -208,15 +236,20 @@ class MapManager {
         // Apply material optimizations
         optimizeMaterial(child.material);
         
-        // Shadow settings
-        child.receiveShadow = true;
-        child.castShadow = true;
+        // Shadow settings - disable shadows on mobile for performance
+        child.receiveShadow = !this.isMobile;
+        child.castShadow = !this.isMobile;
         
         // Mark static objects for performance
         if (!child.name.includes('dynamic') && !child.name.includes('animated')) {
           child.userData.static = true;
           child.matrixAutoUpdate = false;
           child.updateMatrix();
+        }
+        
+        // Set LOD distance for mobile culling
+        if (this.isMobile) {
+          child.userData.maxRenderDistance = child.userData.maxRenderDistance || 80;
         }
       }
     });

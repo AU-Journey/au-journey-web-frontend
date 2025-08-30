@@ -10,13 +10,25 @@ import { PCFSoftShadowMap, LOD, Object3D, Mesh, Group } from 'three';
 export function optimizeRenderer(renderer) {
   // Adaptive quality based on device performance
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const performanceRatio = isMobile ? 1 : Math.min(window.devicePixelRatio, 2);
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  
+  // Smart pixel ratio: prevent blurriness while maintaining performance
+  let performanceRatio;
+  if (isMobile) {
+    // On mobile, use actual pixel ratio but cap it for performance
+    performanceRatio = Math.min(devicePixelRatio, 2);
+  } else {
+    // On desktop, use full pixel ratio up to 2x
+    performanceRatio = Math.min(devicePixelRatio, 2);
+  }
   renderer.setPixelRatio(performanceRatio);
   
-  // Progressive enhancement of shadows
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
-  renderer.shadowMap.autoUpdate = false; // Only update shadows when needed
+  // Progressive enhancement of shadows - reduce on mobile
+  renderer.shadowMap.enabled = !isMobile; // Disable shadows on mobile for performance
+  if (renderer.shadowMap.enabled) {
+    renderer.shadowMap.type = PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = false; // Only update shadows when needed
+  }
   
   // Optimize for initial load
   renderer.powerPreference = "high-performance";
@@ -24,16 +36,12 @@ export function optimizeRenderer(renderer) {
   renderer.stencil = false;
   renderer.depth = true;
   
-  // Enable texture compression
-  renderer.capabilities.getMaxAnisotropy();
+  // Enable texture compression and reduce anisotropy on mobile
+  const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+  renderer.capabilities.maxAnisotropy = isMobile ? Math.min(maxAnisotropy, 4) : maxAnisotropy;
   
-  // Set smaller canvas size initially, then scale up
-  const initialScale = 0.75;
-  renderer.setSize(
-    window.innerWidth * initialScale,
-    window.innerHeight * initialScale,
-    false
-  );
+  // Don't pre-set canvas size here - let SchoolMap handle it properly
+  // This prevents size conflicts and pixelation issues
 }
 
 /**

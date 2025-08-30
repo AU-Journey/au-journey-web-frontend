@@ -71,48 +71,58 @@ class SchoolMap {
   }
 
   init() {
-    // Renderer setup with optimizations using utility functions
+    // Apply rendering optimizations from utility FIRST
+    optimizeRenderer(this.renderer);
+    
+    // Renderer setup with proper sizing (after optimization)
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0xbfd1e5); // Sky blue background
     this.container.appendChild(this.renderer.domElement);
-    
-    // Apply rendering optimizations from utility
-    optimizeRenderer(this.renderer);
 
     // Camera setup: focus on a central area
     this.camera.position.set(0, 20, 50);
     this.camera.lookAt(0, 0, 0);
 
-    // Lighting setup - brighter for better visibility
-    const ambientLight = new AmbientLight(0xffffff, 0.8); // Increased from 0.6 to 0.8
+    // Lighting setup - mobile-optimized
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    // Brighter ambient light for mobile to compensate for disabled shadows
+    const ambientLightIntensity = isMobile ? 1.2 : 0.8;
+    const ambientLight = new AmbientLight(0xffffff, ambientLightIntensity);
     this.scene.add(ambientLight);
     this.ambientLight = ambientLight; // Store reference for weather system
 
-    const directionalLight = new DirectionalLight(0xffffff, 1.0); // Increased from 0.8 to 1.0
+    // Directional light setup - conditional shadows
+    const directionalLight = new DirectionalLight(0xffffff, isMobile ? 1.5 : 1.0);
     directionalLight.position.set(50, 100, 50);
-    directionalLight.castShadow = true;
     
-    // Optimized shadow settings for better performance
-    const shadowMapSize = this.getOptimalShadowMapSize();
-    directionalLight.shadow.mapSize.width = shadowMapSize;
-    directionalLight.shadow.mapSize.height = shadowMapSize;
+    // Only enable shadows on desktop for performance
+    if (!isMobile) {
+      directionalLight.castShadow = true;
+      
+      // Optimized shadow settings for better performance
+      const shadowMapSize = this.getOptimalShadowMapSize();
+      directionalLight.shadow.mapSize.width = shadowMapSize;
+      directionalLight.shadow.mapSize.height = shadowMapSize;
+      
+      // Optimize shadow camera for better performance
+      directionalLight.shadow.camera.near = 0.1;
+      directionalLight.shadow.camera.far = 300; // Reduced from 500
+      directionalLight.shadow.camera.left = -80; // Reduced from -100
+      directionalLight.shadow.camera.right = 80; // Reduced from 100
+      directionalLight.shadow.camera.top = 80; // Reduced from 100
+      directionalLight.shadow.camera.bottom = -80; // Reduced from -100
+      
+      // Additional shadow optimizations
+      directionalLight.shadow.bias = -0.0001;
+      directionalLight.shadow.normalBias = 0.02;
+    }
     
-    // Optimize shadow camera for better performance
-    directionalLight.shadow.camera.near = 0.1;
-    directionalLight.shadow.camera.far = 300; // Reduced from 500
-    directionalLight.shadow.camera.left = -80; // Reduced from -100
-    directionalLight.shadow.camera.right = 80; // Reduced from 100
-    directionalLight.shadow.camera.top = 80; // Reduced from 100
-    directionalLight.shadow.camera.bottom = -80; // Reduced from -100
-    
-    // Additional shadow optimizations
-    directionalLight.shadow.bias = -0.0001;
-    directionalLight.shadow.normalBias = 0.02;
     this.scene.add(directionalLight);
     this.directionalLight = directionalLight; // Store reference for weather system
 
     // Add additional fill light to brighten darker areas
-    const fillLight = new DirectionalLight(0xffffff, 0.3);
+    const fillLight = new DirectionalLight(0xffffff, isMobile ? 0.5 : 0.3);
     fillLight.position.set(-50, 50, -50); // Opposite direction to main light
     fillLight.castShadow = false; // No shadows for fill light to reduce complexity
     this.scene.add(fillLight);
@@ -162,15 +172,44 @@ class SchoolMap {
       this.mapManager.registerMap('school_map', 'school_map.glb');
       this.mapManager.registerMap('school_map2', 'school_map2.glb');
       
-      // Load both maps and add them to the scene
-      // Loading both map models...
-      await this.mapManager.loadBothMaps('school_map', 'school_map2');
+      // Mobile-optimized loading strategy
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
-      // Apply scene optimizations after maps are loaded
-      this.optimizeMapScene();
-      
-      // Hide loading UI after maps are loaded
-      if (this.loadingUI) this.loadingUI.hide();
+      if (isMobile) {
+        // On mobile: Load one map at a time to reduce memory pressure
+        console.log('📱 Mobile detected: Loading maps sequentially');
+        
+        // Load first map
+        await this.mapManager.loadMap('school_map');
+        this.mapManager.addToScene('school_map');
+        this.setMapVisibility('school_map', true);
+        
+        // Hide loading UI early for faster perceived performance
+        if (this.loadingUI) this.loadingUI.hide();
+        
+        // Apply initial optimizations
+        this.optimizeMapScene();
+        
+        // Load second map in background after a delay
+        setTimeout(async () => {
+          try {
+            await this.mapManager.loadMap('school_map2');
+            console.log('📱 Second map loaded in background');
+          } catch (error) {
+            console.warn('Failed to load second map:', error);
+          }
+        }, 2000);
+        
+      } else {
+        // Desktop: Load both maps normally
+        await this.mapManager.loadBothMaps('school_map', 'school_map2');
+        
+        // Apply scene optimizations after maps are loaded
+        this.optimizeMapScene();
+        
+        // Hide loading UI after maps are loaded
+        if (this.loadingUI) this.loadingUI.hide();
+      }
       
       // Add keyboard shortcuts for map control
       window.addEventListener('keydown', (event) => {
@@ -273,6 +312,13 @@ class SchoolMap {
   onWindowResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
+    
+    // Maintain proper pixel ratio on resize to prevent blurriness
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const performanceRatio = isMobile ? Math.min(devicePixelRatio, 2) : Math.min(devicePixelRatio, 2);
+    
+    this.renderer.setPixelRatio(performanceRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
   
@@ -365,13 +411,22 @@ class SchoolMap {
     
     this.frameCount++;
     
+    // Mobile-optimized frame rate control
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile && this.frameCount % 2 === 0) {
+      // Skip every other frame on mobile for better performance
+      return;
+    }
+    
     if (this.controls) {
       this.controls.update();
     }
     
-    // Update weather system (throttled)
+    // Update weather system (throttled more aggressively on mobile)
     const currentTime = performance.now();
-    if (this.weatherSystem && currentTime - this.lastWeatherUpdate > this.weatherUpdateInterval) {
+    const weatherUpdateInterval = isMobile ? this.weatherUpdateInterval * 2 : this.weatherUpdateInterval;
+    
+    if (this.weatherSystem && currentTime - this.lastWeatherUpdate > weatherUpdateInterval) {
       this.weatherSystem.update(currentTime);
       this.lastWeatherUpdate = currentTime;
       
