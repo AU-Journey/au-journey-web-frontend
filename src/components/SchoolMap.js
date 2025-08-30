@@ -19,7 +19,13 @@ import WeatherSystem from './WeatherSystem.js';
 import WeatherDisplay from './WeatherDisplay.js';
 import TramTracker from './TramTracker.js';
 import { gpsRoute } from '../config/gpsRoute.js';
-import { optimizeRenderer, optimizeMaterial, optimizeScene, disposeObject, updateDistanceCulling } from '../utils/renderingOptimizations.js';
+import {
+  applyRendererDefaults,
+  optimizeMaterial,
+  optimizeScene,
+  disposeObject,
+  updateDistanceCulling
+} from '../utils/renderingOptimizations.js';
 import PerformanceMonitor from '../utils/PerformanceMonitor.js';
 import MapManager from './MapManager.js';
 import MemoryManager from '../utils/MemoryManager.js';
@@ -72,7 +78,7 @@ class SchoolMap {
 
   init() {
     // Apply rendering optimizations from utility FIRST
-    optimizeRenderer(this.renderer);
+    applyRendererDefaults(this.renderer);
     
     // Renderer setup with proper sizing (after optimization)
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -157,110 +163,64 @@ class SchoolMap {
 
     // Handle window resize
     window.addEventListener('resize', this.onWindowResize.bind(this));
-    
-    // Add keyboard shortcut for performance monitor
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'p' || event.key === 'P') {
-        this.performanceMonitor.toggle();
-      }
-    });
   }
 
   async initializeMaps() {
     try {
-      // Register both maps
-      this.mapManager.registerMap('school_map', 'school_map.glb');
-      this.mapManager.registerMap('school_map2', 'school_map2.glb');
-      
-      // Mobile-optimized loading strategy
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        // On mobile: Load one map at a time to reduce memory pressure
-        console.log('📱 Mobile detected: Loading maps sequentially');
-        
-        // Load first map
-        await this.mapManager.loadMap('school_map');
-        this.mapManager.addToScene('school_map');
-        this.setMapVisibility('school_map', true);
-        
-        // Hide loading UI early for faster perceived performance
-        if (this.loadingUI) this.loadingUI.hide();
-        
-        // Apply initial optimizations
-        this.optimizeMapScene();
-        
-        // Load second map in background after a delay
-        setTimeout(async () => {
-          try {
-            await this.mapManager.loadMap('school_map2');
-            console.log('📱 Second map loaded in background');
-          } catch (error) {
-            console.warn('Failed to load second map:', error);
+      // Register maps with the IDs expected by MapManager's sequence
+      this.mapManager.registerMap('school_main', 'school_map.glb');
+      this.mapManager.registerMap('school_secondary', 'school_map2.glb'); // correct filename (no underscore)
+
+      // 1) Show the main map ASAP for fast-first-render
+      await this.mapManager.switchToMap('school_main');
+      this.setMapVisibility('school_main', true);
+
+      // Hide loading UI once something meaningful is visible
+      if (this.loadingUI) this.loadingUI.hide();
+
+      // Apply initial scene optimizations
+      this.optimizeMapScene();
+
+      // 2) Defer-load & attach the secondary map so it doesn't block first render
+      setTimeout(async () => {
+        try {
+          await this.mapManager.loadMap('school_secondary');
+          const maps = this.mapManager.getAllMaps();
+          const sec = maps.get('school_secondary');
+          if (sec && sec.model && !sec.inScene) {
+            this.scene.add(sec.model);
+            sec.inScene = true;
+            sec.model.visible = true; // both maps visible together
           }
-        }, 2000);
-        
-      } else {
-        // Desktop: Load both maps normally
-        await this.mapManager.loadBothMaps('school_map', 'school_map2');
-        
-        // Apply scene optimizations after maps are loaded
-        this.optimizeMapScene();
-        
-        // Hide loading UI after maps are loaded
-        if (this.loadingUI) this.loadingUI.hide();
-      }
-      
-      // Add keyboard shortcuts for map control
-      window.addEventListener('keydown', (event) => {
-        if (event.key === 'm' || event.key === 'M') {
-          this.toggleMapVisibility();
+          // Re-run scene touches now that secondary is in
+          this.optimizeMapScene();
+        } catch (err) {
+          console.warn('⚠️ Failed to load secondary map:', err);
         }
-        if (event.key === '1') {
-          this.setMapVisibility('school_map', true);
-          this.setMapVisibility('school_map2', false);
-        }
-        if (event.key === '2') {
-          this.setMapVisibility('school_map', false);
-          this.setMapVisibility('school_map2', true);
-        }
-        if (event.key === '3') {
-          this.setMapVisibility('school_map', true);
-          this.setMapVisibility('school_map2', true);
-        }
-      });
-      
-      // Both maps loaded - Press M to toggle, 1/2/3 for specific maps
-      
+      }, 1200); // small delay keeps first render snappy
+
     } catch (error) {
       console.error('❌ Failed to initialize maps:', error);
-      // Hide loading UI even on error
       if (this.loadingUI) this.loadingUI.hide();
     }
   }
   
   toggleMapVisibility() {
     const maps = this.mapManager.getAllMaps();
-    const map1 = maps.get('school_map');
-    const map2 = maps.get('school_map2');
+    const map1 = maps.get('school_main');
+    const map2 = maps.get('school_secondary');
     
-    if (map1 && map2) {
-      // Toggle between: both visible → map1 only → map2 only → both visible
+    if (map1 && map2 && map1.model && map2.model) {
+      // Toggle between: both visible → main only → secondary only → both visible
       if (map1.model.visible && map2.model.visible) {
-        // Both visible → show only map1
         map1.model.visible = true;
-        map2.model.visible = false;
-        // Showing only school_map
+        map2.model.visible = false; // both → main only
       } else if (map1.model.visible && !map2.model.visible) {
-        // Map1 only → show only map2
-        map1.model.visible = false;
+        map1.model.visible = false; // main only → secondary only
         map2.model.visible = true;
-        // Showing only school_map2
       } else {
-        // Map2 only or neither → show both
-        map1.model.visible = true;
+        map1.model.visible = true;  // secondary only/none → both
         map2.model.visible = true;
-        // Showing both maps
       }
     }
   }
@@ -364,13 +324,8 @@ class SchoolMap {
         console.error('🕳️ Memory Leak Detected:', data.message);
       }
     });
-    
-    // Add keyboard shortcut for memory stats
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'i' || event.key === 'I') {
-        this.logMemoryStats();
-      }
-    });
+
+    // 🔕 Removed all keyboard hotkeys (mobile focus)
   }
   
   performEmergencyCleanup() {
@@ -411,7 +366,7 @@ class SchoolMap {
     
     this.frameCount++;
     
-    // Mobile-optimized frame rate control
+    // Mobile-optimized frame rate control (kept from your original)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile && this.frameCount % 2 === 0) {
       // Skip every other frame on mobile for better performance
