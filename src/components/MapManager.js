@@ -3,7 +3,7 @@
  * - Progressive (LOD/variant) loading: low → medium → high
  * - Network-aware + mobile-aware strategies
  * - Byte-accurate progress reporting (for LoadingUI)
- * - Optional KTX2 (BasisU) textures + DRACO geometry support
+ * - Optional KTX2 (BasisU) textures + DRACO geometry support (used only if your GLBs contain them)
  * - Safe swapping/disposing when upgrading quality
  * - **Hard-coded sequence**: load `school_map.glb` first, then `school_map2.glb`
  */
@@ -52,11 +52,13 @@ class MapManager {
     this.ktx2Path = opts.ktx2Path ?? `${this.baseUrl}libs/basis/`;
 
     // Default map transform & LOD policy
-    const mobileScale = this.isMobile ? 0.8 : 0.908;
+    // ✅ UNIFIED SCALE across desktop & mobile (no device-specific transform)
+    const unifiedScale = 0.908;
     this.defaultMapConfig = {
-      scale: { x: mobileScale, y: mobileScale, z: mobileScale },
+      scale: { x: unifiedScale, y: unifiedScale, z: unifiedScale },
       rotation: { x: 0, y: MathUtils.degToRad(165), z: 0 },
       position: { x: -300, y: 0, z: 220 },
+      // LOD policy can still differ by device without altering transforms
       lodLevels: this.isMobile
         ? [
             { distance: 0, detail: 'medium' },
@@ -229,8 +231,7 @@ class MapManager {
 
     // Optional progressive upgrades for the map we just loaded
     if (opts.progressive !== false) {
-      let v = initial,
-        next;
+      let v = initial, next;
       while ((next = this._nextHigherVariant(v)) && mapData.variants[next]) {
         // fire-and-forget upgrades, in priority order (lower priority number = earlier)
         this._enqueue({ id, variant: next, priority: priority + 1 });
@@ -302,7 +303,15 @@ class MapManager {
         .then(({ arrayBuffer, url }) => this._parseGLB(arrayBuffer, url))
         .then((gltf) => {
           if (token !== mapData.upgradeToken) return null; // superseded
-          if (job.resolve) job.resolve(gltf.scene || gltf.scenes?.[0]);
+          const sceneNode = gltf?.scene || gltf?.scenes?.[0] || null;
+
+          if (job.resolve) {
+            // Initial attach
+            job.resolve(sceneNode);
+          } else {
+            // Progressive upgrade: swap in
+            this._attachVariant(mapData, sceneNode, variant, /*isUpgrade*/ true);
+          }
           return gltf;
         })
         .catch((err) => {
@@ -369,7 +378,7 @@ class MapManager {
     const node = gltfScene || null;
     if (!node) return;
 
-    // Apply transforms
+    // Apply transforms (unified across devices)
     this._applyMapConfiguration(node, mapData.config);
 
     // Optimize materials/meshes (mobile-aware, crisp textures)
@@ -420,17 +429,16 @@ class MapManager {
         }
 
         // --- Other maps (linear) ---
-        ['normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'lightMap'].forEach(
-          (k) => {
-            const tex = m[k];
-            if (!tex) return;
-            tex.generateMipmaps = true;
-            tex.minFilter = THREE.LinearMipmapLinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            tex.anisotropy = isMobile ? 4 : 8;
-            tex.needsUpdate = true;
-          }
-        );
+        ['normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'lightMap']
+        .forEach((k) => {
+          const tex = m[k];
+          if (!tex) return;
+          tex.generateMipmaps = true;
+          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.anisotropy = isMobile ? 4 : 8;
+          tex.needsUpdate = true;
+        });
 
         // --- Transparency only when necessary ---
         const wantsTransparency =
@@ -440,11 +448,8 @@ class MapManager {
           // Prefer alphaTest for foliage/decals (cheaper than full blending)
           if (m.alphaTest == null) m.alphaTest = isMobile ? 0.2 : 0.1;
           m.depthWrite = m.alphaTest < 0.5; // keep depth write when using cutout
-          // Don’t force opacity lower than 1 unless asset authoring requires it
           if (m.opacity == null) m.opacity = 1.0;
-          // Only force DoubleSide if you *know* your asset needs it (e.g., leaves)
-          // m.side = DoubleSide;
-          // Slight polygon offset to mitigate z-fighting for thin decals/foliage
+          // m.side = DoubleSide; // only if your asset needs it
           m.polygonOffset = true;
           m.polygonOffsetFactor = 1;
           m.polygonOffsetUnits = 1;
@@ -460,10 +465,7 @@ class MapManager {
           m.lightMap = m.lightMap || null;
         }
 
-        // Your existing micro-opts
-        try {
-          optimizeMaterial(m);
-        } catch {}
+        try { optimizeMaterial(m); } catch {}
         m.needsUpdate = true;
       });
 
