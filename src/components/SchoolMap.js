@@ -4,19 +4,15 @@ import {
   WebGLRenderer,
   AmbientLight,
   DirectionalLight,
-  PCFSoftShadowMap,
   Vector3,
   Box3,
-  MathUtils,
-  DoubleSide
 } from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import TramMovement from './TramMovement.js';
 import LoadingUI from './LoadingUI';
 import WeatherSystem from './WeatherSystem.js';
-import WeatherDisplay from './WeatherDisplay.js';
+// Removed WeatherDisplay UI per request
 import TramTracker from './TramTracker.js';
 import { gpsRoute } from '../config/gpsRoute.js';
 import {
@@ -37,29 +33,40 @@ class SchoolMap {
     this.camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.renderer = new WebGLRenderer({ antialias: true });
     this.controls = null;
-    this.mapManager = new MapManager(this.scene);
+
+    // Base-aware asset prefix so it works under '/' and '/journey/'
+    this.baseUrl = import.meta.env.BASE_URL || '/';
+
+    // Pass baseUrl + renderer to MapManager so it prefixes /models/* correctly
+    this.mapManager = new MapManager(this.scene, {
+      baseUrl: this.baseUrl,
+      renderer: this.renderer,
+      // If your decoders live elsewhere, customize:
+      // dracoPath: `${this.baseUrl}libs/draco/`,
+      // ktx2Path: `${this.baseUrl}libs/basis/`,
+    });
+
     this.tramMovement = null;
     this.weatherSystem = null;
-    this.weatherDisplay = null;
     this.tramTracker = null;
-    
+
     // Performance monitoring
     this.performanceMonitor = new PerformanceMonitor();
-    
+
     // Memory management
     this.memoryManager = new MemoryManager();
     this.setupMemoryManagement();
-    
+
     // Make memory manager available to other components
     this.scene.userData.memoryManager = this.memoryManager;
-    
+
     // Debug UI throttling
     this.lastDebugUpdate = 0;
     this.debugUpdateInterval = 1000; // 1 second
-    
+
     // Frame counting for optimizations
     this.frameCount = 0;
-    
+
     // Update throttling for performance
     this.lastWeatherUpdate = 0;
     this.lastTramUpdate = 0;
@@ -79,7 +86,7 @@ class SchoolMap {
   init() {
     // Apply rendering optimizations from utility FIRST
     applyRendererDefaults(this.renderer);
-    
+
     // Renderer setup with proper sizing (after optimization)
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0xbfd1e5); // Sky blue background
@@ -91,7 +98,7 @@ class SchoolMap {
 
     // Lighting setup - mobile-optimized
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
+
     // Brighter ambient light for mobile to compensate for disabled shadows
     const ambientLightIntensity = isMobile ? 1.2 : 0.8;
     const ambientLight = new AmbientLight(0xffffff, ambientLightIntensity);
@@ -101,16 +108,16 @@ class SchoolMap {
     // Directional light setup - conditional shadows
     const directionalLight = new DirectionalLight(0xffffff, isMobile ? 1.5 : 1.0);
     directionalLight.position.set(50, 100, 50);
-    
+
     // Only enable shadows on desktop for performance
     if (!isMobile) {
       directionalLight.castShadow = true;
-      
+
       // Optimized shadow settings for better performance
       const shadowMapSize = this.getOptimalShadowMapSize();
       directionalLight.shadow.mapSize.width = shadowMapSize;
       directionalLight.shadow.mapSize.height = shadowMapSize;
-      
+
       // Optimize shadow camera for better performance
       directionalLight.shadow.camera.near = 0.1;
       directionalLight.shadow.camera.far = 300; // Reduced from 500
@@ -118,12 +125,12 @@ class SchoolMap {
       directionalLight.shadow.camera.right = 80; // Reduced from 100
       directionalLight.shadow.camera.top = 80; // Reduced from 100
       directionalLight.shadow.camera.bottom = -80; // Reduced from -100
-      
+
       // Additional shadow optimizations
       directionalLight.shadow.bias = -0.0001;
       directionalLight.shadow.normalBias = 0.02;
     }
-    
+
     this.scene.add(directionalLight);
     this.directionalLight = directionalLight; // Store reference for weather system
 
@@ -134,13 +141,9 @@ class SchoolMap {
     this.scene.add(fillLight);
     this.fillLight = fillLight;
 
-    // Initialize weather system
+    // Initialize weather system (UI removed; background logic retained)
     this.weatherSystem = new WeatherSystem(this.scene, this.renderer);
-    
-    // Initialize weather display
-    this.weatherDisplay = new WeatherDisplay();
-    this.weatherDisplay.show();
-    
+
     // Initialize enhanced tram tracking system
     this.tramTracker = new TramTracker();
 
@@ -168,6 +171,7 @@ class SchoolMap {
   async initializeMaps() {
     try {
       // Register maps with the IDs expected by MapManager's sequence
+      // IMPORTANT: pass just filenames; MapManager adds `${baseUrl}models/` for you
       this.mapManager.registerMap('school_main', 'school_map.glb');
       this.mapManager.registerMap('school_secondary', 'school_map2.glb'); // correct filename (no underscore)
 
@@ -204,12 +208,12 @@ class SchoolMap {
       if (this.loadingUI) this.loadingUI.hide();
     }
   }
-  
+
   toggleMapVisibility() {
     const maps = this.mapManager.getAllMaps();
     const map1 = maps.get('school_main');
     const map2 = maps.get('school_secondary');
-    
+
     if (map1 && map2 && map1.model && map2.model) {
       // Toggle between: both visible → main only → secondary only → both visible
       if (map1.model.visible && map2.model.visible) {
@@ -224,11 +228,11 @@ class SchoolMap {
       }
     }
   }
-  
+
   setMapVisibility(mapId, visible) {
     const maps = this.mapManager.getAllMaps();
     const map = maps.get(mapId);
-    
+
     if (map && map.model) {
       map.model.visible = visible;
       // Map visibility updated
@@ -239,25 +243,25 @@ class SchoolMap {
   optimizeMapScene() {
     // Apply general scene optimizations from utility
     optimizeScene(this.scene);
-    
+
     // Ensure shadows are properly rendered for lighting
     this.renderer.shadowMap.needsUpdate = true;
-    
+
     // Force matrix updates for static objects in all loaded maps
     const allMaps = this.mapManager.getAllMaps();
-    for (const [mapId, mapData] of allMaps) {
+    for (const [, mapData] of allMaps) {
       if (mapData.model && mapData.loaded) {
         mapData.model.traverse((child) => {
           if (child.userData.static) {
             child.matrixAutoUpdate = false;
             child.updateMatrix();
           }
-          
+
           // Ensure proper lighting for all meshes
           if (child.isMesh && child.material) {
             // Apply material optimizations from utility
             optimizeMaterial(child.material);
-            
+
             // Ensure shadows are enabled for better lighting
             child.castShadow = true;
             child.receiveShadow = true;
@@ -265,32 +269,30 @@ class SchoolMap {
         });
       }
     }
-    
-    //console.log('🎯 Scene optimizations applied with enhanced lighting');
   }
 
   onWindowResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    
+
     // Maintain proper pixel ratio on resize to prevent blurriness
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const devicePixelRatio = window.devicePixelRatio || 1;
     const performanceRatio = isMobile ? Math.min(devicePixelRatio, 2) : Math.min(devicePixelRatio, 2);
-    
+
     this.renderer.setPixelRatio(performanceRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
-  
+
   getOptimalShadowMapSize() {
     // Determine shadow map size based on device capabilities
     const gl = this.renderer.getContext();
     const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    
+
     // Check for mobile devices or low-performance GPUs
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const devicePixelRatio = window.devicePixelRatio || 1;
-    
+
     if (isMobile || devicePixelRatio < 2) {
       return Math.min(1024, maxTextureSize); // Lower resolution for mobile
     } else if (maxTextureSize >= 4096) {
@@ -299,7 +301,7 @@ class SchoolMap {
       return 1024; // Fallback for older hardware
     }
   }
-  
+
   setupMemoryManagement() {
     // Set up memory event handlers
     this.memoryManager.onMemoryEvent('warning', (data) => {
@@ -308,7 +310,7 @@ class SchoolMap {
         console.warn('⚠️ Memory Warning:', data.message);
       }
     });
-    
+
     this.memoryManager.onMemoryEvent('critical', (data) => {
       // Critical memory usage - keep for production monitoring
       if (import.meta.env.DEV) {
@@ -317,7 +319,7 @@ class SchoolMap {
       // Could trigger emergency cleanup here
       this.performEmergencyCleanup();
     });
-    
+
     this.memoryManager.onMemoryEvent('leak', (data) => {
       // Memory leak detection - keep for production monitoring
       if (import.meta.env.DEV) {
@@ -327,32 +329,32 @@ class SchoolMap {
 
     // 🔕 Removed all keyboard hotkeys (mobile focus)
   }
-  
+
   performEmergencyCleanup() {
     // Performing emergency cleanup...
-    
+
     // Force garbage collection if available
     this.memoryManager.forceGarbageCollection();
-    
+
     // Reduce shadow map size temporarily
     if (this.directionalLight && this.directionalLight.shadow) {
       this.directionalLight.shadow.mapSize.setScalar(512);
       this.directionalLight.shadow.map?.dispose();
       this.directionalLight.shadow.map = null;
     }
-    
+
     // Reduce weather update frequency
     this.weatherUpdateInterval = 10000; // Increase to 10 seconds
-    
+
     // Emergency cleanup completed
   }
-  
+
   logMemoryStats() {
     const stats = this.memoryManager.getStats();
     if (import.meta.env.DEV) {
       console.log('📊 Memory Statistics:', stats);
     }
-    
+
     const perfStats = this.performanceMonitor?.stats;
     if (perfStats) {
       if (import.meta.env.DEV) {
@@ -363,61 +365,56 @@ class SchoolMap {
 
   animate() {
     requestAnimationFrame(this.animate.bind(this));
-    
+
     this.frameCount++;
-    
+
     // Mobile-optimized frame rate control (kept from your original)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile && this.frameCount % 2 === 0) {
       // Skip every other frame on mobile for better performance
       return;
     }
-    
+
     if (this.controls) {
       this.controls.update();
     }
-    
+
     // Update weather system (throttled more aggressively on mobile)
     const currentTime = performance.now();
     const weatherUpdateInterval = isMobile ? this.weatherUpdateInterval * 2 : this.weatherUpdateInterval;
-    
+
     if (this.weatherSystem && currentTime - this.lastWeatherUpdate > weatherUpdateInterval) {
       this.weatherSystem.update(currentTime);
       this.lastWeatherUpdate = currentTime;
-      
-      // Update weather display
-      if (this.weatherDisplay) {
-        const weatherInfo = this.weatherSystem.getWeatherInfo();
-        this.weatherDisplay.update(weatherInfo);
-      }
+      // WeatherDisplay UI removed, but background/lighting still react to weather
     }
-    
+
     // Update tram tracking if tram is moving (throttled)
     if (currentTime - this.lastTramUpdate > this.tramUpdateInterval) {
       this.updateTramTracking();
       this.lastTramUpdate = currentTime;
     }
-    
+
     // Apply distance-based culling for performance
     updateDistanceCulling(this.camera, this.scene, this.frameCount);
-    
+
     // Update performance monitor
     if (this.performanceMonitor) {
       this.performanceMonitor.update(this.renderer, this.scene, this.camera);
     }
-    
+
     // Update memory manager
     if (this.memoryManager) {
       this.memoryManager.update();
     }
-    
+
     this.renderer.render(this.scene, this.camera);
   }
 
   // Method to update tram position from live GPS (legacy method - Redis is now primary)
   updateTramPositionFromLiveGPS(lat, lon) {
     // Legacy GPS update called - Redis is now primary data source
-    
+
     // This method is primarily for fallback when Redis is unavailable
     if (this.tramMovement) {
       const redisStatus = this.tramMovement.getRedisStatus();
@@ -426,7 +423,7 @@ class SchoolMap {
         this.tramMovement.updateFromLiveGPS(lat, lon);
       }
     }
-    
+
     // Always update local tracking system as secondary data source
     if (this.tramTracker) {
       this.tramTracker.updatePosition(lat, lon);
@@ -453,9 +450,9 @@ class SchoolMap {
       new Vector3(0, 0, 0),
       gpsConfig
     );
-    
+
     // TramMovement initialized with Redis integration
-    
+
     // Wait a moment for initial positioning to complete
     setTimeout(() => {
       if (this.tramMovement && this.tramMovement.lastKnownPosition) {
@@ -468,8 +465,8 @@ class SchoolMap {
 
   loadTramFBXModel() {
     const loader = new FBXLoader();
-    const baseUrl = import.meta.env.BASE_URL || '/';
-    const modelPath = `${baseUrl}models/Tram.fbx`;
+    // Base-aware FBX URL so it resolves under '/journey/' in prod
+    const modelPath = `${this.baseUrl}models/Tram.fbx`;
     loader.load(modelPath, async (object) => {
       this.tram = object;
       // Center and scale tram model
@@ -497,12 +494,12 @@ class SchoolMap {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
-          
+
           // Apply material optimizations if material exists
           if (child.material) {
             optimizeMaterial(child.material);
           }
-          
+
           // Mark as dynamic object (not static)
           child.userData.static = false;
           child.frustumCulled = true; // Enable frustum culling
@@ -511,10 +508,10 @@ class SchoolMap {
 
       this.scene.add(this.tram);
       this.renderer.shadowMap.needsUpdate = true;
-      
+
       // Initialize tram movement first, then focus camera after GPS data arrives
       await this.initializeTramMovement();
-      
+
       // Focus camera on a reasonable default position initially
       this.camera.position.set(0, 30, 60);
       this.camera.lookAt(0, 0, 0);
@@ -530,7 +527,7 @@ class SchoolMap {
   // Focus camera on tram (called when tram position is updated)
   focusCameraOnTram() {
     if (!this.tram) return;
-    
+
     // Offset the camera to be above and behind the tram
     const offset = new Vector3(0, 30, 60); // Y: height, Z: behind
     const tramPos = this.tram.position.clone();
@@ -546,7 +543,7 @@ class SchoolMap {
   // Update tram tracking system continuously for WebSocket GPS data
   updateTramTracking() {
     if (!this.tramMovement || !this.tramTracker || !this.tramMovement.tram) return;
-    
+
     // Get current tram progress (now includes WebSocket GPS data)
     let progress;
     try {
@@ -556,7 +553,7 @@ class SchoolMap {
       console.error('❌ Error getting tram progress:', error);
       return;
     }
-    
+
     // Check WebSocket connection health
     const isHealthy = progress.isConnectionHealthy;
     if (!isHealthy && progress.lastConnectionLoss) {
@@ -573,10 +570,10 @@ class SchoolMap {
     if (progress.currentGPS) {
       // Update local tracker with real-time GPS data
       this.tramTracker.updatePosition(progress.currentGPS.lat, progress.currentGPS.lon);
-      
+
       // Update debug UI if available
       this.updateDebugUI(progress.currentGPS, progress);
-      
+
       // Focus camera on tram when GPS data is available (first time)
       if (!this.cameraFocused && this.tramMovement.lastKnownPosition) {
         this.focusCameraOnTram();
@@ -592,18 +589,18 @@ class SchoolMap {
       }
     }
   }
-  
+
   // Update debug UI with current status
   async updateDebugUI(currentGPS, progress) {
     if (!this.tramDebugUI) return;
-    
+
     // Throttle debug UI updates
     const currentTime = Date.now();
     if (currentTime - this.lastDebugUpdate < this.debugUpdateInterval) {
       return;
     }
     this.lastDebugUpdate = currentTime;
-    
+
     try {
       // Prepare debug data
       const debugData = {
@@ -616,23 +613,23 @@ class SchoolMap {
           webSocketStatus: progress.webSocketStatus
         }
       };
-      
+
       // Update debug UI
       this.tramDebugUI.updateStatus(debugData);
-      
+
     } catch (error) {
       if (import.meta.env.DEV) {
         console.warn('⚠️ Debug UI update failed:', error);
       }
     }
   }
-  
+
   // Get current tram status for API (fallback to local tracker)
   getTramStatusAPI() {
     if (!this.tramTracker) return null;
     return this.tramTracker.getStatusForAPI();
   }
-  
+
   // Reset tram tracking
   resetTramTracking() {
     if (this.tramTracker) {
@@ -647,42 +644,38 @@ class SchoolMap {
       this.tramMovement.dispose();
       this.tramMovement = null;
     }
-    
+
     // Dispose weather system
     if (this.weatherSystem) {
       this.weatherSystem.dispose();
       this.weatherSystem = null;
     }
-    
-    // Dispose weather display
-    if (this.weatherDisplay) {
-      this.weatherDisplay.dispose();
-      this.weatherDisplay = null;
-    }
-    
+
+    // WeatherDisplay UI removed
+
     // Dispose map manager and all maps
     if (this.mapManager) {
       this.mapManager.dispose();
       this.mapManager = null;
     }
-    
+
     // Dispose tram model properly
     if (this.tram) {
       disposeObject(this.tram);
     }
-    
+
     // Dispose performance monitor
     if (this.performanceMonitor) {
       this.performanceMonitor.dispose();
       this.performanceMonitor = null;
     }
-    
+
     // Dispose memory manager
     if (this.memoryManager) {
       this.memoryManager.dispose();
       this.memoryManager = null;
     }
-    
+
     // SchoolMap resources disposed
   }
 }
