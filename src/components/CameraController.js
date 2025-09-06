@@ -53,15 +53,45 @@ class CameraController {
       right: 20px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 12px;
       z-index: 1000;
       padding-bottom: env(safe-area-inset-bottom, 0px);
+      pointer-events: auto;
     `;
+    
+    // Add mobile-specific optimizations via media query
+    const style = document.createElement('style');
+    style.textContent = `
+      @media (max-width: 768px), (hover: none) {
+        .camera-control-button {
+          min-width: 52px !important;
+          min-height: 52px !important;
+          width: 52px !important;
+          height: 52px !important;
+          font-size: 20px !important;
+          margin: 4px 0 !important;
+        }
+        .camera-controls-container {
+          bottom: 120px !important;
+          right: 15px !important;
+          gap: 16px !important;
+        }
+      }
+      
+      @media (max-width: 480px) {
+        .camera-controls-container {
+          bottom: 140px !important;
+          right: 10px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
     
     // Bird's Eye View Button - SwiftUI-inspired design
     this.birdEyeButton = document.createElement('button');
     this.birdEyeButton.innerHTML = '🦅';
     this.birdEyeButton.title = 'Bird\'s Eye View';
+    this.birdEyeButton.className = 'camera-control-button';
     this.birdEyeButton.style.cssText = `
       background: rgba(255, 255, 255, 0.95);
       color: #007AFF;
@@ -73,19 +103,25 @@ class CameraController {
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       transition: all 0.2s ease;
-      width: 44px;
-      height: 44px;
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      min-height: 48px;
       display: flex;
       align-items: center;
       justify-content: center;
       -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
       user-select: none;
+      touch-action: manipulation;
     `;
     
     // Tram Follow Button - SwiftUI-inspired design
     this.tramFollowButton = document.createElement('button');
     this.tramFollowButton.innerHTML = '🚊';
     this.tramFollowButton.title = 'Follow Tram';
+    this.tramFollowButton.className = 'camera-control-button';
     this.tramFollowButton.style.cssText = `
       background: rgba(255, 255, 255, 0.95);
       color: #007AFF;
@@ -97,35 +133,47 @@ class CameraController {
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       transition: all 0.2s ease;
-      width: 44px;
-      height: 44px;
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      min-height: 48px;
       display: flex;
       align-items: center;
       justify-content: center;
       -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
       user-select: none;
+      touch-action: manipulation;
     `;
     
     // Add SwiftUI-like touch interactions
     [this.birdEyeButton, this.tramFollowButton].forEach(button => {
-      // Touch events for iOS-like feedback
+      // Touch events for iOS-like feedback - using passive listeners where possible
       button.addEventListener('touchstart', (e) => {
-        e.preventDefault();
+        e.stopPropagation();
         button.style.transform = 'scale(0.95)';
         button.style.background = 'rgba(255, 255, 255, 0.8)';
-      });
+      }, { passive: false });
       
       button.addEventListener('touchend', (e) => {
-        e.preventDefault();
         button.style.transform = 'scale(1)';
         button.style.background = 'rgba(255, 255, 255, 0.95)';
-      });
+        // Stop event propagation to prevent conflicts with Three.js controls
+        e.stopPropagation();
+        // Trigger click event for better mobile compatibility
+        setTimeout(() => {
+          if (e.target === button && !e.defaultPrevented) {
+            button.click();
+          }
+        }, 10);
+      }, { passive: false });
       
       button.addEventListener('touchcancel', (e) => {
-        e.preventDefault();
+        e.stopPropagation();
         button.style.transform = 'scale(1)';
         button.style.background = 'rgba(255, 255, 255, 0.95)';
-      });
+      }, { passive: false });
       
       // Mouse events for desktop testing
       button.addEventListener('mousedown', () => {
@@ -144,16 +192,21 @@ class CameraController {
       });
     });
     
-    // Event listeners
+    // Event listeners - improved for mobile compatibility
     this.birdEyeButton.addEventListener('click', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       this.setBirdEyeView();
     });
     
     this.tramFollowButton.addEventListener('click', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       this.setTramFollow();
     });
+    
+    // Add class to container for media queries
+    this.uiContainer.className = 'camera-controls-container';
     
     // Add buttons to container
     this.uiContainer.appendChild(this.birdEyeButton);
