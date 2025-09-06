@@ -25,6 +25,7 @@ import {
 import PerformanceMonitor from '../utils/PerformanceMonitor.js';
 import MapManager from './MapManager.js';
 import MemoryManager from '../utils/MemoryManager.js';
+import CameraController from './CameraController.js';
 
 class SchoolMap {
   constructor(container) {
@@ -49,6 +50,7 @@ class SchoolMap {
     this.tramMovement = null;
     this.weatherSystem = null;
     this.tramTracker = null;
+    this.cameraController = null;
 
     // Performance monitoring
     this.performanceMonitor = new PerformanceMonitor();
@@ -155,6 +157,9 @@ class SchoolMap {
     this.controls.minDistance = 20; // Prevent zooming too close
     this.controls.maxDistance = 200; // Prevent zooming too far
 
+    // Initialize camera controller for different camera modes
+    this.cameraController = new CameraController(this.camera, this.controls, this.scene);
+
     // Register and load maps with the MapManager
     this.initializeMaps();
 
@@ -199,7 +204,10 @@ class SchoolMap {
           // Re-run scene touches now that secondary is in
           this.optimizeMapScene();
         } catch (err) {
-          console.warn('⚠️ Failed to load secondary map:', err);
+          // Failed to load secondary map
+          if (import.meta.env.DEV) {
+            console.warn('⚠️ Failed to load secondary map:', err);
+          }
         }
       }, 1200); // small delay keeps first render snappy
 
@@ -312,16 +320,15 @@ class SchoolMap {
     });
 
     this.memoryManager.onMemoryEvent('critical', (data) => {
-      // Critical memory usage - keep for production monitoring
+      // Critical memory usage - trigger cleanup
       if (import.meta.env.DEV) {
         console.error('🚨 Critical Memory Usage:', data.message);
       }
-      // Could trigger emergency cleanup here
       this.performEmergencyCleanup();
     });
 
     this.memoryManager.onMemoryEvent('leak', (data) => {
-      // Memory leak detection - keep for production monitoring
+      // Memory leak detection - keep for development debugging
       if (import.meta.env.DEV) {
         console.error('🕳️ Memory Leak Detected:', data.message);
       }
@@ -350,14 +357,13 @@ class SchoolMap {
   }
 
   logMemoryStats() {
-    const stats = this.memoryManager.getStats();
+    // Memory and performance statistics available for development debugging
     if (import.meta.env.DEV) {
+      const stats = this.memoryManager.getStats();
       console.log('📊 Memory Statistics:', stats);
-    }
 
-    const perfStats = this.performanceMonitor?.stats;
-    if (perfStats) {
-      if (import.meta.env.DEV) {
+      const perfStats = this.performanceMonitor?.stats;
+      if (perfStats) {
         console.log('⚡ Performance Statistics:', perfStats);
       }
     }
@@ -377,6 +383,11 @@ class SchoolMap {
 
     if (this.controls) {
       this.controls.update();
+    }
+
+    // Update camera controller for tram following mode
+    if (this.cameraController) {
+      this.cameraController.update();
     }
 
     // Update weather system (throttled more aggressively on mobile)
@@ -674,6 +685,12 @@ class SchoolMap {
     if (this.memoryManager) {
       this.memoryManager.dispose();
       this.memoryManager = null;
+    }
+
+    // Dispose camera controller
+    if (this.cameraController) {
+      this.cameraController.dispose();
+      this.cameraController = null;
     }
 
     // SchoolMap resources disposed

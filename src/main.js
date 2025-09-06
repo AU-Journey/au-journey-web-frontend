@@ -8,6 +8,9 @@ document.body.appendChild(container);
 
 const schoolMap = new SchoolMap(container);
 
+// Make schoolMap globally accessible for CameraController
+window.schoolMapInstance = schoolMap;
+
 // Add global test functions
 window.startTramTracking = () => {
   schoolMap.tramStatusDisplay.show();

@@ -63,15 +63,11 @@ class TramMovement {
   async startRealTimeTracking() {
     if (!this.isRealTimeMode) return;
     
-    console.log('🚊 Starting real-time GPS tracking with WebSocket...');
-    
     // WebSocket event-driven approach
     this.setupWebSocketTracking();
   }
   
   setupWebSocketTracking() {
-    console.log('🔌 Setting up WebSocket event-driven tracking...');
-    
     // Subscribe to GPS updates
     this.unsubscribeGPS = this.webSocketGPS.onGPSUpdate((gpsData) => {
       this.handleGPSUpdate(gpsData);
@@ -79,20 +75,19 @@ class TramMovement {
     
     // Subscribe to connection changes
     this.unsubscribeConnection = this.webSocketGPS.onConnectionChange((connected) => {
-      console.log('🔌 WebSocket connection status:', connected ? 'Connected' : 'Disconnected');
-      
       if (!connected) {
-        console.log('⚠️ WebSocket disconnected, using simulation data...');
         this.handleConnectionLoss();
       } else {
-        console.log('✅ WebSocket reconnected, resuming real-time tracking');
         this.handleConnectionRestored();
       }
     });
     
     // Subscribe to errors
     this.unsubscribeError = this.webSocketGPS.onError((error) => {
-      console.warn('❌ WebSocket GPS error:', error);
+      // Keep error logging for debugging critical issues
+      if (import.meta.env.DEV) {
+        console.warn('❌ WebSocket GPS error:', error);
+      }
     });
     
     // Request initial GPS data
@@ -143,7 +138,6 @@ class TramMovement {
       
       // First time loading - position tram immediately at current GPS
       if (!this.currentGPS) {
-        console.log('🎯 Initial tram positioning from GPS:', gpsData.source || 'unknown');
         this.currentGPS = gpsData.current;
         this.previousGPS = gpsData.previous || gpsData.current;
         
@@ -173,12 +167,11 @@ class TramMovement {
       
       this.lastUpdateTime = Date.now();
       
-      // Only log movement in development
-      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      // Movement logged only in development mode
+      if (import.meta.env.DEV) {
         console.log('📍 Tram moving to:', {
           lat: this.currentGPS.lat.toFixed(6), 
-          lon: this.currentGPS.lon.toFixed(6),
-          source: gpsData.source || 'unknown'
+          lon: this.currentGPS.lon.toFixed(6)
         });
       }
     } else {
@@ -200,13 +193,6 @@ class TramMovement {
     
     // Store last known position for fallback
     this.lastKnownPosition = position;
-    
-    console.log('📍 Tram positioned immediately at:', {
-      lat: lat.toFixed(6),
-      lon: lon.toFixed(6),
-      x: position.x.toFixed(2),
-      z: position.z.toFixed(2)
-    });
   }
 
   updateTramPosition() {
@@ -297,8 +283,6 @@ class TramMovement {
   }
 
   handleConnectionLoss() {
-    console.warn('⚠️ WebSocket connection lost, maintaining last known position...');
-    
     // Stop current movement but maintain position
     this.stopTramMovement();
     
@@ -307,8 +291,6 @@ class TramMovement {
   }
 
   handleConnectionRestored() {
-    console.log('✅ WebSocket connection restored, requesting fresh GPS data...');
-    
     // Request fresh GPS data
     if (this.webSocketGPS && this.webSocketGPS.isConnectionHealthy()) {
       this.webSocketGPS.requestGPSData();
@@ -318,11 +300,8 @@ class TramMovement {
   }
 
   handleConnectionError() {
-    console.warn('⚠️ WebSocket GPS unavailable, checking fallback options...');
-    
     // Use last known position if available
     if (this.lastKnownPosition && this.tram) {
-      console.log('📍 Using last known position for tram');
       return;
     }
     
@@ -377,8 +356,6 @@ class TramMovement {
 
   // Legacy compatibility methods
   start() {
-    console.log('🚊 Tram movement start requested - enabling real-time mode');
-    
     if (!this.isRealTimeMode) {
       this.isRealTimeMode = true;
       this.startRealTimeTracking();
@@ -386,7 +363,6 @@ class TramMovement {
   }
 
   stop() {
-    console.log('🚊 Tram movement stop requested');
     this.isMoving = false;
     
     if (this.currentTween) {
@@ -436,8 +412,8 @@ class TramMovement {
     // Use the smooth movement system
     this.updateTramPosition();
     
-    // Only log in development
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    // GPS updated via legacy method - logged in development only
+    if (import.meta.env.DEV) {
       console.log('📍 GPS updated via legacy method:', { lat, lon });
     }
   }
@@ -511,8 +487,6 @@ class TramMovement {
     if (this.webSocketGPS) {
       this.webSocketGPS.disconnect();
     }
-    
-    console.log('🚊 TramMovement disposed');
   }
 }
 

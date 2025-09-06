@@ -235,8 +235,10 @@ class MemoryManager {
   forceGarbageCollection() {
     if (window.gc && typeof window.gc === 'function') {
       window.gc();
-      console.log('🗑️ Forced garbage collection');
-    } else {
+      if (import.meta.env.DEV) {
+        console.log('🗑️ Forced garbage collection');
+      }
+    } else if (import.meta.env.DEV) {
       console.warn('🗑️ Garbage collection not available (run with --expose-gc flag)');
     }
   }
@@ -267,7 +269,9 @@ class MemoryManager {
    * Dispose all tracked objects and cleanup
    */
   dispose() {
-    console.log('🧹 Disposing MemoryManager');
+    if (import.meta.env.DEV) {
+      console.log('🧹 Disposing MemoryManager');
+    }
     
     // Dispose all tracked objects
     for (const entry of this.trackedObjects) {
@@ -275,7 +279,9 @@ class MemoryManager {
         try {
           entry.object.dispose();
         } catch (error) {
-          console.warn('Error disposing tracked object:', error);
+          if (import.meta.env.DEV) {
+            console.warn('Error disposing tracked object:', error);
+          }
         }
       }
     }
