@@ -189,6 +189,9 @@ class SchoolMap {
 
       // Apply initial scene optimizations
       this.optimizeMapScene();
+      
+      // Calculate and update map center for camera controller
+      this.updateMapCenterForCamera();
 
       // 2) Defer-load & attach the secondary map so it doesn't block first render
       setTimeout(async () => {
@@ -203,6 +206,9 @@ class SchoolMap {
           }
           // Re-run scene touches now that secondary is in
           this.optimizeMapScene();
+          
+          // Recalculate map center with both maps loaded
+          this.updateMapCenterForCamera();
         } catch (err) {
           // Failed to load secondary map
           if (import.meta.env.DEV) {
@@ -646,6 +652,64 @@ class SchoolMap {
     if (this.tramTracker) {
       this.tramTracker.reset();
     }
+  }
+
+  // Update camera controller with calculated map center
+  updateMapCenterForCamera() {
+    if (!this.cameraController) return;
+    
+    const mapCenter = this.calculateMapCenter();
+    this.cameraController.updateBirdEyeTarget(mapCenter);
+  }
+
+  // Calculate the visual center of the loaded map geometry
+  calculateMapCenter() {
+    const maps = this.mapManager.getAllMaps();
+    const mainMap = maps.get('school_main');
+    const secondaryMap = maps.get('school_secondary');
+    
+    // Create combined bounding box from all loaded maps
+    const combinedBox = new Box3();
+    let hasGeometry = false;
+    
+    // Add main map to bounding box calculation
+    if (mainMap && mainMap.model && mainMap.inScene) {
+      const mapBox = new Box3().setFromObject(mainMap.model);
+      if (!mapBox.isEmpty()) {
+        combinedBox.union(mapBox);
+        hasGeometry = true;
+      }
+    }
+    
+    // Add secondary map to bounding box calculation
+    if (secondaryMap && secondaryMap.model && secondaryMap.inScene) {
+      const mapBox = new Box3().setFromObject(secondaryMap.model);
+      if (!mapBox.isEmpty()) {
+        combinedBox.union(mapBox);
+        hasGeometry = true;
+      }
+    }
+    
+    if (hasGeometry) {
+      // Calculate the center of the combined geometry
+      const center = combinedBox.getCenter(new Vector3());
+      // Store the calculated center for use by other components
+      this.mapCenter = center;
+      return center;
+    }
+    
+    // Fallback to map object position if no geometry found
+    const fallbackCenter = new Vector3(-300, 0, 220);
+    this.mapCenter = fallbackCenter;
+    return fallbackCenter;
+  }
+  
+  // Get the current map center (calculate if not cached)
+  getMapCenter() {
+    if (!this.mapCenter) {
+      return this.calculateMapCenter();
+    }
+    return this.mapCenter.clone();
   }
 
   // Dispose of resources and cleanup

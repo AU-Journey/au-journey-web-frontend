@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
-import { MathUtils, DoubleSide, LoadingManager } from 'three';
+import { MathUtils, LoadingManager } from 'three';
 import { optimizeMaterial, disposeObject } from '../utils/renderingOptimizations.js';
 
 class MapManager {
@@ -449,7 +449,6 @@ class MapManager {
           if (m.alphaTest == null) m.alphaTest = isMobile ? 0.2 : 0.1;
           m.depthWrite = m.alphaTest < 0.5; // keep depth write when using cutout
           if (m.opacity == null) m.opacity = 1.0;
-          // m.side = DoubleSide; // only if your asset needs it
           m.polygonOffset = true;
           m.polygonOffsetFactor = 1;
           m.polygonOffsetUnits = 1;

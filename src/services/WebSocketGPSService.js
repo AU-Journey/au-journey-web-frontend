@@ -368,27 +368,6 @@ class WebSocketGPSService {
     setTimeout(() => this.connect(), 1000);
   }
 
-  // Check if GPS data is stale
-  isGPSDataStale(timestamp, maxAgeMs = 60000) {
-    if (!timestamp) return true;
-    
-    const now = new Date();
-    const gpsTime = new Date(timestamp);
-    const age = now - gpsTime;
-    
-    return age > maxAgeMs;
-  }
-
-  // Check if GPS coordinates have changed
-  hasGPSChanged(current, previous) {
-    if (!current || !previous) return true;
-    
-    const tolerance = 0.000005; // roughly 0.5 meter in GPS coordinates
-    const latDiff = Math.abs(current.lat - previous.lat);
-    const lonDiff = Math.abs(current.lon - previous.lon);
-    
-    return latDiff > tolerance || lonDiff > tolerance;
-  }
 }
 
 export default WebSocketGPSService; 

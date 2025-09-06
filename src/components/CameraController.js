@@ -25,9 +25,9 @@ class CameraController {
     this.tramFollowMinDistance = 15;
     this.tramFollowMaxDistance = 80;
     
-    // Bird's eye view settings
-    this.birdEyePosition = new Vector3(0, 120, 0);
-    this.birdEyeTarget = new Vector3(0, 0, 0);
+    // Bird's eye view settings - centered on map with slight angle  
+    this.birdEyePosition = new Vector3(53.69, 300, 50);  // Angled view - moved camera back and lower
+    this.birdEyeTarget = new Vector3(53.69, 0, -55.24);  // Keep target at map center
     
     // Animation settings
     this.transitionDuration = 1.5;
@@ -36,6 +36,10 @@ class CameraController {
     // UI Container
     this.uiContainer = null;
     this.createUI();
+    
+    // Debug mode for position finding
+    this.debugMode = false;
+    this.setupDebugTouch();
     
     // Update trams periodically
     this.updateTramObjectsInterval = setInterval(() => {
@@ -170,10 +174,9 @@ class CameraController {
       }, { passive: false });
       
       button.addEventListener('touchcancel', (e) => {
-        e.stopPropagation();
         button.style.transform = 'scale(1)';
         button.style.background = 'rgba(255, 255, 255, 0.95)';
-      }, { passive: false });
+      }, { passive: true });
       
       // Mouse events for desktop testing
       button.addEventListener('mousedown', () => {
@@ -217,6 +220,17 @@ class CameraController {
     
     // Update button states
     this.updateButtonStates();
+  }
+  
+  // Update bird's eye view target with calculated map center
+  updateBirdEyeTarget(mapCenter) {
+    if (!mapCenter) return;
+    
+    // Update the target to the calculated map center
+    this.birdEyeTarget.copy(mapCenter);
+    
+    // Position camera above the center at the same relative height
+    this.birdEyePosition.set(mapCenter.x, 350, mapCenter.z);
   }
   
   updateButtonStates() {
@@ -277,10 +291,12 @@ class CameraController {
     const timeline = gsap.timeline({
       onComplete: () => {
         this.isTransitioning = false;
-        // Restrict controls for top-down view
-        this.controls.minDistance = 50;
-        this.controls.maxDistance = 200;
-        this.controls.maxPolarAngle = Math.PI / 6; // Only allow slight angle changes
+        // Optimize controls for bird's eye exploration
+        // Calculate current distance as maximum to prevent zooming out further
+        const currentDistance = this.camera.position.distanceTo(this.controls.target);
+        this.controls.minDistance = 30; // Allow zooming in for detail exploration
+        this.controls.maxDistance = Math.max(currentDistance, 350); // Prevent zooming out beyond current view
+        this.controls.maxPolarAngle = Math.PI / 2.5; // Allow reasonable angle changes (72 degrees)
         this.controls.enableRotate = true;
       }
     });
@@ -402,6 +418,14 @@ class CameraController {
       clearInterval(this.updateTramObjectsInterval);
     }
     
+    if (this.debugUpdateInterval) {
+      clearInterval(this.debugUpdateInterval);
+    }
+    
+    if (this.debugInfo && this.debugInfo.parentNode) {
+      this.debugInfo.parentNode.removeChild(this.debugInfo);
+    }
+    
     if (this.uiContainer && this.uiContainer.parentNode) {
       this.uiContainer.parentNode.removeChild(this.uiContainer);
     }
@@ -410,6 +434,86 @@ class CameraController {
     gsap.killTweensOf(this.camera.position);
     gsap.killTweensOf(this.controls.target);
   }
+  
+  // Debug function to help find map center
+  setupDebugTouch() {
+    if (!this.debugMode) return;
+    
+    // Create debug info display
+    this.debugInfo = document.createElement('div');
+    this.debugInfo.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      z-index: 1001;
+      pointer-events: none;
+      white-space: pre-line;
+    `;
+    document.body.appendChild(this.debugInfo);
+    
+    // Add touch/click listener to canvas
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+      canvas.addEventListener('click', (e) => {
+        this.logCurrentPosition(e);
+      });
+      
+      canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        this.logCurrentPosition(e);
+      });
+    }
+    
+    // Update debug info continuously
+    this.debugUpdateInterval = setInterval(() => {
+      this.updateDebugInfo();
+    }, 100);
+    
+    console.log('Debug mode enabled! Click/touch anywhere on the map to log position info.');
+  }
+  
+  logCurrentPosition(e) {
+    const cameraPos = this.camera.position;
+    const target = this.controls.target;
+    
+    console.log('=== POSITION DEBUG INFO ===');
+    console.log('Camera Position:', `x: ${cameraPos.x.toFixed(2)}, y: ${cameraPos.y.toFixed(2)}, z: ${cameraPos.z.toFixed(2)}`);
+    console.log('Camera Target:', `x: ${target.x.toFixed(2)}, y: ${target.y.toFixed(2)}, z: ${target.z.toFixed(2)}`);
+    console.log('Distance from target:', this.camera.position.distanceTo(target).toFixed(2));
+    console.log('===========================');
+    
+    // Flash the debug info
+    if (this.debugInfo) {
+      this.debugInfo.style.background = 'rgba(255, 255, 255, 0.9)';
+      this.debugInfo.style.color = 'black';
+      setTimeout(() => {
+        this.debugInfo.style.background = 'rgba(0, 0, 0, 0.8)';
+        this.debugInfo.style.color = 'white';
+      }, 200);
+    }
+  }
+  
+  updateDebugInfo() {
+    if (!this.debugInfo) return;
+    
+    const cameraPos = this.camera.position;
+    const target = this.controls.target;
+    const distance = this.camera.position.distanceTo(target);
+    
+    this.debugInfo.textContent = 
+      `DEBUG MODE - Click to log position
+Camera: ${cameraPos.x.toFixed(1)}, ${cameraPos.y.toFixed(1)}, ${cameraPos.z.toFixed(1)}
+Target: ${target.x.toFixed(1)}, ${target.y.toFixed(1)}, ${target.z.toFixed(1)}
+Distance: ${distance.toFixed(1)}
+Mode: ${this.currentMode}`;
+  }
 }
+
 
 export default CameraController;

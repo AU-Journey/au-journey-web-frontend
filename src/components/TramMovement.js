@@ -276,11 +276,6 @@ class TramMovement {
     // Movement stopped
   }
 
-  calculateAndApplyMovement() {
-    // This method is now handled by updateTramPosition()
-    // Keeping for legacy compatibility
-    this.updateTramPosition();
-  }
 
   handleConnectionLoss() {
     // Stop current movement but maintain position
@@ -334,25 +329,6 @@ class TramMovement {
     }
   }
 
-  switchToFallbackMode() {
-    this.isRealTimeMode = false;
-    
-    // Position tram at first fallback point
-    if (this.fallbackGPSPoints && this.fallbackGPSPoints.length > 0) {
-      const firstPoint = this.fallbackGPSPoints[0];
-      const position = this.calculatePosition(firstPoint.lat, firstPoint.lon);
-      
-      if (this.tram) {
-        gsap.to(this.tram.position, {
-          duration: 2.0,
-          x: position.x,
-          y: position.y,
-          z: position.z,
-          ease: 'power2.out'
-        });
-      }
-    }
-  }
 
   // Legacy compatibility methods
   start() {
