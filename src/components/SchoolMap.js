@@ -175,6 +175,11 @@ class SchoolMap {
 
   async initializeMaps() {
     try {
+      // Connect LoadingUI to MapManager's loading manager for progress tracking
+      if (this.loadingUI && this.mapManager.loadingManager) {
+        this.loadingUI.connectLoadingManager(this.mapManager.loadingManager, { label: 'Map' });
+      }
+
       // Register maps with the IDs expected by MapManager's sequence
       // IMPORTANT: pass just filenames; MapManager adds `${baseUrl}models/` for you
       this.mapManager.registerMap('school_main', 'school_map.glb');
@@ -184,8 +189,7 @@ class SchoolMap {
       await this.mapManager.switchToMap('school_main');
       this.setMapVisibility('school_main', true);
 
-      // Hide loading UI once something meaningful is visible
-      if (this.loadingUI) this.loadingUI.hide();
+      // LoadingUI will automatically hide when the loading manager completes
 
       // Apply initial scene optimizations
       this.optimizeMapScene();
@@ -219,7 +223,12 @@ class SchoolMap {
 
     } catch (error) {
       console.error('❌ Failed to initialize maps:', error);
-      if (this.loadingUI) this.loadingUI.hide();
+      // Hide loading UI on error as a fallback
+      if (this.loadingUI) {
+        this.loadingUI.setMessage('Failed to load map');
+        this.loadingUI.setSubMessage('Please refresh to try again');
+        setTimeout(() => this.loadingUI.hide(), 2000);
+      }
     }
   }
 
