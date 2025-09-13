@@ -121,7 +121,7 @@ class CameraController {
     `;
 
     const mapImg = document.createElement('img');
-    mapImg.src = '/src/components/svg_assets/map.svg'; // update path
+    mapImg.src = 'src/components/img_asset/map.png';
     mapImg.alt = '';
     mapImg.width = 24;
     mapImg.height = 24;
@@ -158,7 +158,7 @@ class CameraController {
     `;
 
     const tramImg = document.createElement('img');
-    tramImg.src = '/src/components/svg_assets/tram.svg'; // update path
+    tramImg.src = 'src/components/img_asset/tram.png';
     tramImg.alt = '';
     tramImg.width = 24;
     tramImg.height = 24;
