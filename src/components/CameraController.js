@@ -93,7 +93,6 @@ class CameraController {
     
     // Bird's Eye View Button - SwiftUI-inspired design
     this.birdEyeButton = document.createElement('button');
-    this.birdEyeButton.innerHTML = '🦅';
     this.birdEyeButton.title = 'Bird\'s Eye View';
     this.birdEyeButton.className = 'camera-control-button';
     this.birdEyeButton.style.cssText = `
@@ -107,10 +106,10 @@ class CameraController {
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       transition: all 0.2s ease;
-      width: 48px;
-      height: 48px;
-      min-width: 48px;
-      min-height: 48px;
+      width: 54px;
+      height: 54px;
+      min-width: 54px;
+      min-height: 54px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -120,12 +119,19 @@ class CameraController {
       user-select: none;
       touch-action: manipulation;
     `;
+
+    const mapImg = document.createElement('img');
+    mapImg.src = '/src/components/svg_assets/map.svg'; // update path
+    mapImg.alt = '';
+    mapImg.width = 24;
+    mapImg.height = 24;
+    mapImg.style.pointerEvents = 'none';
+    this.birdEyeButton.appendChild(mapImg);
     
     // Tram Follow Button - SwiftUI-inspired design
     this.tramFollowButton = document.createElement('button');
-    this.tramFollowButton.innerHTML = '🚊';
-    this.tramFollowButton.title = 'Follow Tram';
     this.tramFollowButton.className = 'camera-control-button';
+    this.tramFollowButton.title = 'Follow Tram';
     this.tramFollowButton.style.cssText = `
       background: rgba(255, 255, 255, 0.95);
       color: #007AFF;
@@ -137,10 +143,10 @@ class CameraController {
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       transition: all 0.2s ease;
-      width: 48px;
-      height: 48px;
-      min-width: 48px;
-      min-height: 48px;
+      width: 54px;
+      height: 54px;
+      min-width: 54px;
+      min-height: 54px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -150,6 +156,14 @@ class CameraController {
       user-select: none;
       touch-action: manipulation;
     `;
+
+    const tramImg = document.createElement('img');
+    tramImg.src = '/src/components/svg_assets/tram.svg'; // update path
+    tramImg.alt = '';
+    tramImg.width = 24;
+    tramImg.height = 24;
+    tramImg.style.pointerEvents = 'none';
+    this.tramFollowButton.appendChild(tramImg);
     
     // Add SwiftUI-like touch interactions
     [this.birdEyeButton, this.tramFollowButton].forEach(button => {
@@ -256,7 +270,7 @@ class CameraController {
     }
     
     if (activeButton) {
-      activeButton.style.background = '#007AFF';
+      activeButton.style.background = '#444444';
       activeButton.style.color = 'white';
       activeButton.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.3)';
     }
