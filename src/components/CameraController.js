@@ -8,7 +8,7 @@ class CameraController {
     this.scene = scene;
     
     // Camera modes: 'free', 'bird-eye', 'tram-follow'
-    this.currentMode = 'free';
+    this.currentMode = 'tram-follow';
     this.previousMode = 'free';
     
     // Store original settings for restoration
@@ -121,7 +121,7 @@ class CameraController {
     `;
 
     const mapImg = document.createElement('img');
-    mapImg.src = '/img_asset/map.png';
+    mapImg.src = 'img_asset/map.png';
     mapImg.alt = '';
     mapImg.width = 24;
     mapImg.height = 24;
@@ -158,7 +158,7 @@ class CameraController {
     `;
 
     const tramImg = document.createElement('img');
-    tramImg.src = '/img_asset/tram.png';
+    tramImg.src = 'img_asset/tram.png';
     tramImg.alt = '';
     tramImg.width = 24;
     tramImg.height = 24;
