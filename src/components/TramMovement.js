@@ -10,13 +10,17 @@ class TramMovement {
     this.isMoving = false;
     this.baseHeight = -0.3; // Lowered to match initial placement
     this.currentTween = null;
+    this.tramId = gpsConfig.tramId || 'tram_1'; // Default to tram_1
     
     // Speed settings (units per second) - inspired by your smooth version
     this.tramSpeed = 10; // Slower speed for realistic tram movement
     this.rotationSpeed = 1; // Slower rotation for smoother turning
     
-    // GPS service - WebSocket only
-    this.webSocketGPS = new WebSocketGPSService(gpsConfig);
+    // GPS service - WebSocket only with tram-specific configuration
+    this.webSocketGPS = new WebSocketGPSService({
+      ...gpsConfig,
+      tramId: this.tramId
+    });
     
     // GPS tracking
     this.currentGPS = null;
@@ -90,8 +94,8 @@ class TramMovement {
       }
     });
     
-    // Request initial GPS data
-    this.webSocketGPS.requestGPSData();
+    // Request initial tram data
+    this.webSocketGPS.requestTramData();
   }
   
 
@@ -169,8 +173,8 @@ class TramMovement {
       
       // Movement logged only in development mode
       if (import.meta.env.DEV) {
-        console.log('📍 Tram moving to:', {
-          lat: this.currentGPS.lat.toFixed(6), 
+        console.log(`📍 ${this.tramId} moving to:`, {
+          lat: this.currentGPS.lat.toFixed(6),
           lon: this.currentGPS.lon.toFixed(6)
         });
       }
@@ -286,9 +290,9 @@ class TramMovement {
   }
 
   handleConnectionRestored() {
-    // Request fresh GPS data
+    // Request fresh tram data
     if (this.webSocketGPS && this.webSocketGPS.isConnectionHealthy()) {
-      this.webSocketGPS.requestGPSData();
+      this.webSocketGPS.requestTramData();
     }
     
     this.lastConnectionLoss = null;
@@ -390,7 +394,7 @@ class TramMovement {
     
     // GPS updated via legacy method - logged in development only
     if (import.meta.env.DEV) {
-      console.log('📍 GPS updated via legacy method:', { lat, lon });
+      console.log(`📍 ${this.tramId} GPS updated via legacy method:`, { lat, lon });
     }
   }
 

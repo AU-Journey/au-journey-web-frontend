@@ -12,6 +12,7 @@ class WebSocketGPSService {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 5000,
+      tramId: config.tramId || 'tram_1', // Default to tram_1
       ...config
     };
     
@@ -34,6 +35,7 @@ class WebSocketGPSService {
     
     console.log('🔌 WebSocket GPS Service: Initializing...');
     console.log('🌐 Server URL:', this.config.serverUrl);
+    console.log('🚋 Tram ID:', this.config.tramId);
     
     // Initialize connection
     this.connect();
@@ -91,8 +93,8 @@ class WebSocketGPSService {
       this.connectionAttempts = 0;
       this.notifyConnectionChange(true);
       
-      // Request initial GPS data
-      this.requestGPSData();
+      // Request initial tram data
+      this.requestTramData();
     });
     
     this.socket.on('disconnect', (reason) => {
@@ -116,24 +118,55 @@ class WebSocketGPSService {
       }
     });
     
-    // GPS data events
+    // Tram data events
     this.socket.on('welcome', (data) => {
       console.log('👋 Server welcome:', data.message);
     });
-    
+
+    // Handle legacy GPS data events for backward compatibility
     this.socket.on('gps-data', (data) => {
-      console.log('📍 GPS data received via request:', data);
-      this.processGPSData(data, 'websocket-request');
+      console.log('📍 Legacy GPS data received via request:', data);
+      this.processGPSData(data, 'websocket-request-legacy');
     });
-    
+
     this.socket.on('gps-data-update', (data) => {
-      console.log('📡 GPS data broadcast received:', data);
-      this.processGPSData(data, 'websocket-broadcast');
+      console.log('📡 Legacy GPS data broadcast received:', data);
+      this.processGPSData(data, 'websocket-broadcast-legacy');
     });
-    
+
+    // Handle new tram-specific data events
+    this.socket.on('tram-data', (response) => {
+      console.log(`📍 Tram data received for ${response.tramId}:`, response.data);
+      console.log(`🔍 Checking if ${response.tramId} matches our tramId: ${this.config.tramId}`);
+      if (response.tramId === this.config.tramId) {
+        console.log(`✅ Match! Processing ${response.tramId} data`);
+        this.processGPSData(response.data, 'websocket-tram-request');
+      } else {
+        console.log(`❌ No match. Ignoring ${response.tramId} data (we're listening for ${this.config.tramId})`);
+      }
+    });
+
+    this.socket.on('tram-data-update', (broadcast) => {
+      console.log(`📡 Tram data broadcast received for ${broadcast.tramId}:`, broadcast.data);
+      console.log(`🔍 Checking if ${broadcast.tramId} matches our tramId: ${this.config.tramId}`);
+      if (broadcast.tramId === this.config.tramId) {
+        console.log(`✅ Match! Processing ${broadcast.tramId} broadcast data`);
+        this.processGPSData(broadcast.data, 'websocket-tram-broadcast');
+      } else {
+        console.log(`❌ No match. Ignoring ${broadcast.tramId} data (we're listening for ${this.config.tramId})`);
+      }
+    });
+
     this.socket.on('gps-error', (error) => {
       console.warn('❌ GPS data error:', error);
       this.notifyError(error.message || 'GPS data error');
+    });
+
+    this.socket.on('tram-error', (error) => {
+      console.warn(`❌ Tram data error for ${error.tramId}:`, error);
+      if (error.tramId === this.config.tramId) {
+        this.notifyError(error.message || 'Tram data error');
+      }
     });
     
     // Utility events
@@ -143,8 +176,11 @@ class WebSocketGPSService {
   }
   
   processGPSData(gpsData, source) {
+    console.log(`🔄 Processing GPS data from ${source} for ${this.config.tramId}:`, gpsData);
+
     if (!this.isValidGPSData(gpsData.c) || !this.isValidGPSData(gpsData.p)) {
       console.warn('⚠️ Invalid GPS data received:', gpsData);
+      console.warn('⚠️ Expected format: { c: { lat: X, lon: Y, t: timestamp }, p: { lat: X, lon: Y, t: timestamp }, s: "active" }');
       return;
     }
     
@@ -168,6 +204,12 @@ class WebSocketGPSService {
     }
     
     // Notify callbacks
+    console.log(`✅ GPS data processed successfully for ${this.config.tramId}:`, {
+      current: this.currentGPS,
+      previous: this.previousGPS,
+      status: gpsData.s || 'active'
+    });
+
     this.notifyGPSUpdate({
       current: this.currentGPS,
       previous: this.previousGPS,
@@ -177,6 +219,16 @@ class WebSocketGPSService {
     });
   }
   
+  requestTramData() {
+    if (this.isConnected && this.socket) {
+      console.log(`🚋 Requesting ${this.config.tramId} data...`);
+      this.socket.emit('request-tram-data', this.config.tramId);
+    } else {
+      console.warn('⚠️ Cannot request tram data - not connected');
+    }
+  }
+
+  // Legacy method for backward compatibility
   requestGPSData() {
     if (this.isConnected && this.socket) {
       this.socket.emit('request-gps-data');
@@ -341,7 +393,8 @@ class WebSocketGPSService {
       environment: 'browser',
       connectionType: this.isConnected ? 'websocket' : 'simulation',
       serverUrl: this.config.serverUrl,
-      socketId: this.socket ? this.socket.id : null
+      socketId: this.socket ? this.socket.id : null,
+      tramId: this.config.tramId
     };
   }
 

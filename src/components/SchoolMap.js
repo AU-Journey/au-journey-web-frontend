@@ -48,8 +48,10 @@ class SchoolMap {
     });
 
     this.tramMovement = null;
+    this.tramMovement2 = null;
     this.weatherSystem = null;
     this.tramTracker = null;
+    this.tramTracker2 = null;
     this.cameraController = null;
 
     // Performance monitoring
@@ -147,7 +149,8 @@ class SchoolMap {
     this.weatherSystem = new WeatherSystem(this.scene, this.renderer);
 
     // Initialize enhanced tram tracking system
-    this.tramTracker = new TramTracker();
+    this.tramTracker = new TramTracker('tram_1');
+    this.tramTracker2 = new TramTracker('tram_2');
 
     // Controls setup
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -163,8 +166,9 @@ class SchoolMap {
     // Register and load maps with the MapManager
     this.initializeMaps();
 
-    // Load tram model and let it position itself based on Redis data
+    // Load tram models and let them position themselves based on Redis data
     this.loadTramFBXModel();
+    this.loadTram2FBXModel();
 
     // Start animation loop
     this.animate();
@@ -438,21 +442,29 @@ class SchoolMap {
   }
 
   // Method to update tram position from live GPS (legacy method - Redis is now primary)
-  updateTramPositionFromLiveGPS(lat, lon) {
+  updateTramPositionFromLiveGPS(lat, lon, tramId = 'tram_1') {
     // Legacy GPS update called - Redis is now primary data source
 
     // This method is primarily for fallback when Redis is unavailable
-    if (this.tramMovement) {
+    if (tramId === 'tram_1' && this.tramMovement) {
       const redisStatus = this.tramMovement.getRedisStatus();
       if (!redisStatus.isConnected) {
         // Using legacy GPS update as Redis fallback
         this.tramMovement.updateFromLiveGPS(lat, lon);
       }
+    } else if (tramId === 'tram_2' && this.tramMovement2) {
+      const redisStatus = this.tramMovement2.getRedisStatus();
+      if (!redisStatus.isConnected) {
+        // Using legacy GPS update as Redis fallback
+        this.tramMovement2.updateFromLiveGPS(lat, lon);
+      }
     }
 
     // Always update local tracking system as secondary data source
-    if (this.tramTracker) {
+    if (tramId === 'tram_1' && this.tramTracker) {
       this.tramTracker.updatePosition(lat, lon);
+    } else if (tramId === 'tram_2' && this.tramTracker2) {
+      this.tramTracker2.updatePosition(lat, lon);
     }
   }
 
@@ -465,6 +477,7 @@ class SchoolMap {
 
     // WebSocket GPS configuration
     const gpsConfig = {
+      tramId: 'tram_1', // Match the tram_1.fbx model and Redis tram_1 data entry
       // WebSocketGPSService will handle environment detection and defaults
     };
 
@@ -489,10 +502,35 @@ class SchoolMap {
     }, 2000); // Give time for Redis data to arrive and position tram
   }
 
+  // Initialize tram_2 movement system
+  async initializeTram2Movement() {
+    if (!this.tram2) {
+      console.warn('Cannot initialize tram_2 movement: tram2 model not loaded');
+      return;
+    }
+
+    // WebSocket GPS configuration for tram_2
+    const gpsConfig = {
+      tramId: 'tram_2', // Match the tram_2.fbx model and Redis tram_2 data entry
+      // WebSocketGPSService will handle environment detection and defaults
+    };
+
+    // Create TramMovement instance for tram_2 with WebSocket GPS integration
+    this.tramMovement2 = new TramMovement(
+      this.tram2,
+      null,
+      this.gpsPoints, // Fallback GPS points
+      new Vector3(20, 0, 20), // Different initial position from tram_1
+      gpsConfig
+    );
+
+    // TramMovement2 initialized with Redis integration
+  }
+
   loadTramFBXModel() {
     const loader = new FBXLoader();
     // Base-aware FBX URL so it resolves under '/journey/' in prod
-    const modelPath = `${this.baseUrl}models/Tram.fbx`;
+    const modelPath = `${this.baseUrl}models/tram_1.fbx`;
     loader.load(modelPath, async (object) => {
       this.tram = object;
       // Center and scale tram model
@@ -550,6 +588,60 @@ class SchoolMap {
     });
   }
 
+  loadTram2FBXModel() {
+    const loader = new FBXLoader();
+    // Base-aware FBX URL so it resolves under '/journey/' in prod
+    const modelPath = `${this.baseUrl}models/tram_2.fbx`;
+    loader.load(modelPath, async (object) => {
+      this.tram2 = object;
+      // Center and scale tram model
+      const bbox = new Box3().setFromObject(this.tram2);
+      const size = bbox.getSize(new Vector3());
+      const center = bbox.getCenter(new Vector3());
+      this.tram2.position.sub(center); // Center the model
+
+      // Scale tram to reasonable size (12,4,8)
+      const targetSize = new Vector3(12, 4, 8);
+      const scale = new Vector3(
+        targetSize.x / size.x,
+        targetSize.y / size.y,
+        targetSize.z / size.z
+      );
+      const uniformScale = (scale.x + scale.y + scale.z) / 3;
+      this.tram2.scale.set(uniformScale, uniformScale, uniformScale);
+
+      // Don't position tram at fixed location - let TramMovement handle positioning via Redis
+      this.tram2.position.set(20, -0.3, 20); // Different temporary position until Redis data arrives
+      this.tram2.rotation.y = Math.PI; // Rotate tram 180 degrees for correct forward direction
+
+      // Apply optimizations to tram model
+      this.tram2.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+
+          // Apply material optimizations if material exists
+          if (child.material) {
+            optimizeMaterial(child.material);
+          }
+
+          // Mark as dynamic object (not static)
+          child.userData.static = false;
+          child.frustumCulled = true; // Enable frustum culling
+        }
+      });
+
+      this.scene.add(this.tram2);
+      this.renderer.shadowMap.needsUpdate = true;
+
+      // Initialize tram_2 movement
+      await this.initializeTram2Movement();
+
+    }, undefined, (error) => {
+      console.error('Error loading tram_2.fbx:', error);
+    });
+  }
+
   // Focus camera on tram (called when tram position is updated)
   focusCameraOnTram() {
     if (!this.tram) return;
@@ -568,15 +660,27 @@ class SchoolMap {
 
   // Update tram tracking system continuously for WebSocket GPS data
   updateTramTracking() {
-    if (!this.tramMovement || !this.tramTracker || !this.tramMovement.tram) return;
+    // Update tram_1 tracking
+    this.updateSingleTramTracking('tram_1');
+
+    // Update tram_2 tracking
+    this.updateSingleTramTracking('tram_2');
+  }
+
+  // Update tracking for a single tram
+  updateSingleTramTracking(tramId) {
+    const tramMovement = tramId === 'tram_1' ? this.tramMovement : this.tramMovement2;
+    const tramTracker = tramId === 'tram_1' ? this.tramTracker : this.tramTracker2;
+
+    if (!tramMovement || !tramTracker || !tramMovement.tram) return;
 
     // Get current tram progress (now includes WebSocket GPS data)
     let progress;
     try {
-      progress = this.tramMovement.getProgress();
+      progress = tramMovement.getProgress();
       if (!progress) return;
     } catch (error) {
-      console.error('❌ Error getting tram progress:', error);
+      console.error(`❌ Error getting ${tramId} progress:`, error);
       return;
     }
 
@@ -587,7 +691,7 @@ class SchoolMap {
       const disconnectedTime = Date.now() - progress.lastConnectionLoss;
       if (disconnectedTime > 10000) {
         if (import.meta.env.DEV) {
-          console.warn('⚠️ WebSocket connection lost for', Math.floor(disconnectedTime / 1000), 'seconds');
+          console.warn(`⚠️ ${tramId} WebSocket connection lost for`, Math.floor(disconnectedTime / 1000), 'seconds');
         }
       }
     }
@@ -595,13 +699,15 @@ class SchoolMap {
     // Use real-time GPS data from WebSocket if available
     if (progress.currentGPS) {
       // Update local tracker with real-time GPS data
-      this.tramTracker.updatePosition(progress.currentGPS.lat, progress.currentGPS.lon);
+      tramTracker.updatePosition(progress.currentGPS.lat, progress.currentGPS.lon);
 
-      // Update debug UI if available
-      this.updateDebugUI(progress.currentGPS, progress);
+      // Update debug UI if available (only for tram_1 to avoid clutter)
+      if (tramId === 'tram_1') {
+        this.updateDebugUI(progress.currentGPS, progress);
+      }
 
-      // Focus camera on tram when GPS data is available (first time)
-      if (!this.cameraFocused && this.tramMovement.lastKnownPosition) {
+      // Focus camera on tram_1 when GPS data is available (first time)
+      if (tramId === 'tram_1' && !this.cameraFocused && tramMovement.lastKnownPosition) {
         this.focusCameraOnTram();
         this.cameraFocused = true;
         // Camera focused on tram at GPS position
@@ -610,8 +716,10 @@ class SchoolMap {
       // Fallback to static GPS points if WebSocket is unavailable
       const currentGPS = this.gpsPoints[progress.currentIndex];
       if (currentGPS) {
-        this.tramTracker.updatePosition(currentGPS.lat, currentGPS.lon);
-        this.updateDebugUI(currentGPS, progress);
+        tramTracker.updatePosition(currentGPS.lat, currentGPS.lon);
+        if (tramId === 'tram_1') {
+          this.updateDebugUI(currentGPS, progress);
+        }
       }
     }
   }
@@ -729,6 +837,12 @@ class SchoolMap {
       this.tramMovement = null;
     }
 
+    // Dispose tram_2 movement system and Redis connection
+    if (this.tramMovement2) {
+      this.tramMovement2.dispose();
+      this.tramMovement2 = null;
+    }
+
     // Dispose weather system
     if (this.weatherSystem) {
       this.weatherSystem.dispose();
@@ -743,9 +857,12 @@ class SchoolMap {
       this.mapManager = null;
     }
 
-    // Dispose tram model properly
+    // Dispose tram models properly
     if (this.tram) {
       disposeObject(this.tram);
+    }
+    if (this.tram2) {
+      disposeObject(this.tram2);
     }
 
     // Dispose performance monitor

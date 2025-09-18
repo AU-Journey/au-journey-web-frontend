@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 
 class TramTracker {
-  constructor() {
+  constructor(tramId = 'tram_1') {
+    // Tram identification
+    this.tramId = tramId;
+
     // Simplified tram tracking state - mainly for frontend display
     this.currentStatus = 'Stopped';
     this.currentLocation = null;
@@ -214,6 +217,7 @@ class TramTracker {
   // Get tracking info
   getTrackingInfo() {
     return {
+      tramId: this.tramId,
       status: this.currentStatus,
       isMoving: this.isMoving,
       currentLocation: this.currentLocation,
@@ -229,7 +233,7 @@ class TramTracker {
     const info = this.getTrackingInfo();
     
     return {
-      tram_id: 'tram_01_frontend',
+      tram_id: this.tramId,
       currentStatus: this.currentStatus,
       location: {
         lat: info.currentLocation?.lat || null,
