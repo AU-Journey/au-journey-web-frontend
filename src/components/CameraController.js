@@ -234,6 +234,7 @@ class CameraController {
     
     // Update button states
     this.updateButtonStates();
+    this.updateButtonTitle();
   }
   
   // Update bird's eye view target with calculated map center
@@ -275,27 +276,42 @@ class CameraController {
       activeButton.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.3)';
     }
   }
-  
+
+  updateButtonTitle() {
+    if (this.currentMode === 'tram-follow' && this.tramObjects.length > 0) {
+      const tramNumber = this.currentTramIndex + 1;
+      this.tramFollowButton.title = `Following Tram ${tramNumber} - Click to switch`;
+    } else {
+      this.tramFollowButton.title = 'Follow Tram';
+    }
+  }
+
   updateTramObjects() {
     // Clear previous trams
     this.tramObjects = [];
-    
-    // Get tram directly from SchoolMap instance - this is the main tram.fbx object
-    if (window.schoolMapInstance && window.schoolMapInstance.tram) {
-      this.tramObjects.push(window.schoolMapInstance.tram);
+
+    // Get both trams from SchoolMap instance
+    if (window.schoolMapInstance) {
+      if (window.schoolMapInstance.tram) {
+        this.tramObjects.push(window.schoolMapInstance.tram);
+      }
+      if (window.schoolMapInstance.tram2) {
+        this.tramObjects.push(window.schoolMapInstance.tram2);
+      }
     }
-    
+
     // If we're in tram follow mode and no trams available, switch to bird's eye view
     if (this.currentMode === 'tram-follow' && this.tramObjects.length === 0) {
       this.setBirdEyeView();
     }
-    
+
     // Update button states to show current tram count
     this.updateButtonStates();
+    this.updateButtonTitle();
   }
   
   setBirdEyeView() {
-    if (this.isTransitioning || this.currentMode === 'bird-eye') return;
+    if (this.isTransitioning) return;
     
     this.previousMode = this.currentMode;
     this.currentMode = 'bird-eye';
@@ -331,31 +347,35 @@ class CameraController {
       ease: 'power2.out',
       onUpdate: () => this.controls.update()
     }, '<');
-    
+
     this.updateButtonStates();
+    this.updateButtonTitle();
   }
-  
+
   setTramFollow() {
     if (this.isTransitioning) return;
-    
+
     this.updateTramObjects();
-    
+
     if (this.tramObjects.length === 0) {
       return;
     }
-    
+
     if (this.currentMode === 'tram-follow') {
-      // If already following tram, switch back to bird's eye view
-      this.setBirdEyeView();
+      // If already following tram, cycle to next tram
+      this.currentTramIndex = (this.currentTramIndex + 1) % this.tramObjects.length;
+      this.followCurrentTram();
+      this.updateButtonTitle();
       return;
     }
-    
+
     // Enter tram follow mode
     this.previousMode = this.currentMode;
     this.currentMode = 'tram-follow';
     this.currentTramIndex = 0;
-    
+
     this.followCurrentTram();
+    this.updateButtonTitle();
   }
   
   followCurrentTram() {
@@ -398,8 +418,9 @@ class CameraController {
       ease: 'power2.out',
       onUpdate: () => this.controls.update()
     }, '<');
-    
+
     this.updateButtonStates();
+    this.updateButtonTitle();
   }
   
   
