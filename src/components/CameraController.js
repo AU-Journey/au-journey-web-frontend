@@ -7,9 +7,9 @@ class CameraController {
     this.controls = controls;
     this.scene = scene;
     
-    // Camera modes: 'free', 'bird-eye', 'tram-follow'
+    // Camera modes: 'bird-eye', 'tram-follow'
     this.currentMode = 'tram-follow';
-    this.previousMode = 'free';
+    this.previousMode = 'tram-follow';
     
     // Store original settings for restoration
     this.originalPosition = this.camera.position.clone();
@@ -264,9 +264,9 @@ class CameraController {
       case 'tram-follow':
         activeButton = this.tramFollowButton;
         break;
-      case 'free':
       default:
-        // Default to no active button when in free mode
+        // Default to tram-follow if unknown mode
+        activeButton = this.tramFollowButton;
         break;
     }
     
@@ -312,12 +312,53 @@ class CameraController {
   
   setBirdEyeView() {
     if (this.isTransitioning) return;
-    
+
     this.previousMode = this.currentMode;
     this.currentMode = 'bird-eye';
     this.isTransitioning = true;
-    
-    // Animate camera to bird's eye position
+
+    // Calculate dynamic target based on current context
+    let dynamicTarget = new Vector3();
+
+    if (this.previousMode === 'tram-follow' && this.tramObjects.length > 0) {
+      // If we were following a tram, center on the current tram
+      const currentTram = this.tramObjects[this.currentTramIndex];
+      if (currentTram) {
+        dynamicTarget.copy(currentTram.position);
+      } else {
+        dynamicTarget.copy(this.controls.target);
+      }
+    } else {
+      // Use current camera target as center point
+      dynamicTarget.copy(this.controls.target);
+    }
+
+    // Calculate dynamic camera position - preserve current viewing angle at bird's eye height
+    const currentRelativePosition = new Vector3().subVectors(this.camera.position, this.controls.target);
+
+    // Normalize the horizontal direction and scale to appropriate bird's eye distance
+    const horizontalDirection = new Vector3(currentRelativePosition.x, 0, currentRelativePosition.z);
+    const horizontalDistance = horizontalDirection.length();
+
+    // Use a small fixed distance for true bird's eye overhead view while preserving rotation
+    const birdEyeHorizontalDistance = 40;
+
+    // Normalize and scale to bird's eye distance
+    if (horizontalDistance > 0) {
+      horizontalDirection.normalize().multiplyScalar(birdEyeHorizontalDistance);
+    } else {
+      // Default direction if camera is directly above (slightly forward for perspective)
+      horizontalDirection.set(0, 0, birdEyeHorizontalDistance);
+    }
+
+    // Position camera at bird's eye height while maintaining horizontal angle
+    const dynamicCameraPosition = new Vector3(
+      dynamicTarget.x + horizontalDirection.x,
+      300, // Fixed height for bird's eye view
+      dynamicTarget.z + horizontalDirection.z
+    );
+
+    // Animate camera to dynamic bird's eye position
     const timeline = gsap.timeline({
       onComplete: () => {
         this.isTransitioning = false;
@@ -330,20 +371,20 @@ class CameraController {
         this.controls.enableRotate = true;
       }
     });
-    
+
     timeline.to(this.camera.position, {
       duration: this.transitionDuration,
-      x: this.birdEyePosition.x,
-      y: this.birdEyePosition.y,
-      z: this.birdEyePosition.z,
+      x: dynamicCameraPosition.x,
+      y: dynamicCameraPosition.y,
+      z: dynamicCameraPosition.z,
       ease: 'power2.out'
     });
-    
+
     timeline.to(this.controls.target, {
       duration: this.transitionDuration,
-      x: this.birdEyeTarget.x,
-      y: this.birdEyeTarget.y,
-      z: this.birdEyeTarget.z,
+      x: dynamicTarget.x,
+      y: dynamicTarget.y,
+      z: dynamicTarget.z,
       ease: 'power2.out',
       onUpdate: () => this.controls.update()
     }, '<');
