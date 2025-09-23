@@ -50,6 +50,11 @@ class TramMovement {
     this.lastKnownPosition = null;
     this.lastStaleWarning = 0;
     this.lastConnectionLoss = null;
+
+    // Stationary state management to prevent spinning
+    this.isStationary = false;
+    this.stationaryCount = 0;
+    this.stationaryThreshold = 3; // Require 3 consecutive small movements to consider stationary
     
     // Start real-time GPS tracking
     this.startRealTimeTracking();
@@ -201,48 +206,63 @@ class TramMovement {
 
   updateTramPosition() {
     if (!this.tram || !this.currentGPS || !this.previousGPS) return;
-    
+
     const currentPosition = this.calculatePosition(this.currentGPS.lat, this.currentGPS.lon);
     const previousPosition = this.calculatePosition(this.previousGPS.lat, this.previousGPS.lon);
-    
+
     // Store last known position for fallback
     this.lastKnownPosition = currentPosition;
-    
+
     // Calculate movement direction and distance
     const dx = currentPosition.x - previousPosition.x;
     const dz = currentPosition.z - previousPosition.z;
     const distance = Math.sqrt(dx * dx + dz * dz);
-    
-    // Skip if distance is too small
+
+    // Check if distance is too small for meaningful movement
     if (distance < 0.5) {
+      // Increment stationary counter
+      this.stationaryCount++;
+
+      // If we've had enough consecutive small movements, mark as stationary
+      if (this.stationaryCount >= this.stationaryThreshold) {
+        this.isStationary = true;
+      }
+
+      // Keep tram stationary - don't rotate for micro-movements
       return;
     }
-    
+
+    // Reset stationary state if we have significant movement
+    this.isStationary = false;
+    this.stationaryCount = 0;
+
     // Stop current movement
     if (this.currentTween) {
       this.currentTween.kill();
     }
-    
-    // Calculate duration based on speed and distance (inspired by your smooth version)
+
+    // Calculate duration based on speed and distance
     const duration = Math.max(1.0, distance / this.tramSpeed);
-    
+
     // Calculate rotation to face movement direction
     const modelForwardOffset = -Math.PI / 2; // Adjust based on your model
     const targetRotation = Math.atan2(dx, dz) + modelForwardOffset;
-    
-    // Create timeline for movement (inspired by your smooth version)
+
+    // Create timeline for movement
     const tl = gsap.timeline();
-    
+
     // Handle rotation first - make sure tram faces direction before moving
     const currentRotation = this.tram.rotation.y;
     let rotationDiff = targetRotation - currentRotation;
-    
+
     // Handle rotation wrapping
     if (rotationDiff > Math.PI) rotationDiff -= 2 * Math.PI;
     if (rotationDiff < -Math.PI) rotationDiff += 2 * Math.PI;
-    
-    // Always rotate first if needed
-    if (Math.abs(rotationDiff) > 0.05) {
+
+    // Only rotate if the difference is significant enough AND distance is significant
+    // This prevents micro-rotations from GPS noise
+    const rotationThreshold = 0.1; // Increased threshold for rotation
+    if (Math.abs(rotationDiff) > rotationThreshold && distance >= 0.5) {
       const rotationDuration = Math.min(1.0, Math.abs(rotationDiff) / this.rotationSpeed);
       tl.to(this.tram.rotation, {
         duration: rotationDuration,
@@ -250,7 +270,7 @@ class TramMovement {
         ease: 'power2.inOut'
       });
     }
-    
+
     // Move to target after rotation
     tl.to(this.tram.position, {
       duration: duration,
@@ -262,7 +282,7 @@ class TramMovement {
         this.isMoving = false; // Mark as stationary when reached
       }
     });
-    
+
     this.currentTween = tl;
     this.isMoving = true;
   }

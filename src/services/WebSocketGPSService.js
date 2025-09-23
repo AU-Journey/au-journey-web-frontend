@@ -256,11 +256,11 @@ class WebSocketGPSService {
   
   hasGPSChanged(newGPS, oldGPS) {
     if (!oldGPS || !newGPS) return true;
-    
+
     const latDiff = Math.abs(newGPS.lat - oldGPS.lat);
     const lonDiff = Math.abs(newGPS.lon - oldGPS.lon);
-    const threshold = 0.000001; // Very small change threshold
-    
+    const threshold = 0.00001; // Increased threshold to ignore GPS noise/drift
+
     return latDiff > threshold || lonDiff > threshold;
   }
   
