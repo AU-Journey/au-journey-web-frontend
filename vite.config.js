@@ -3,16 +3,10 @@ import { defineConfig, splitVendorChunkPlugin } from 'vite';
 import { resolve } from 'path';
 import viteCompression from 'vite-plugin-compression';
 
-export default defineConfig(({ command, mode }) => {
-  const deployTarget = process.env.DEPLOY_TARGET || 'digitalocean';
+export default defineConfig(({ mode }) => {
+  const base = mode === 'production' ? '/tram/' : '/';
 
-  // ✅ Serve under /journey/ for DO and Docker in prod; '/' otherwise
-  const base =
-    mode === 'production'
-      ? (['docker', 'digitalocean'].includes(deployTarget) ? '/journey/' : '/')
-      : '/';
-
-  console.log(`Building with base path: ${base} (mode: ${mode}, target: ${deployTarget})`);
+  console.log(`Building with base path: ${base} (mode: ${mode})`);
 
   return {
     base,
