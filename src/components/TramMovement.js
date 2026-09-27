@@ -26,7 +26,6 @@ class TramMovement {
     this.currentGPS = null;
     this.previousGPS = null;
     this.lastUpdateTime = 0;
-    this.updateInterval = 2000; // Update every 2 seconds to reduce load
     
     // For fallback/initial positioning, use static GPS points if provided
     this.fallbackGPSPoints = gpsPoints;
@@ -163,7 +162,6 @@ class TramMovement {
       
       if (!hasChanged) {
         // Don't log unchanged coordinates to reduce noise
-        this.stopTramMovement();
         return;
       }
       
@@ -241,8 +239,10 @@ class TramMovement {
       this.currentTween.kill();
     }
 
-    // Calculate duration based on speed and distance
-    const duration = Math.max(1.0, distance / this.tramSpeed);
+    const elapsedSeconds = (Date.now() - this.lastUpdateTime) / 1000;
+    const duration = Number.isFinite(elapsedSeconds) && elapsedSeconds > 0
+      ? Math.max(0.25, Math.min(5, elapsedSeconds * 1.1))
+      : Math.max(0.25, distance / this.tramSpeed);
 
     // Calculate rotation to face movement direction
     const modelForwardOffset = -Math.PI / 2; // Adjust based on your model
@@ -251,7 +251,7 @@ class TramMovement {
     // Create timeline for movement
     const tl = gsap.timeline();
 
-    // Handle rotation first - make sure tram faces direction before moving
+    // Turn while moving to avoid pausing at each location update
     const currentRotation = this.tram.rotation.y;
     let rotationDiff = targetRotation - currentRotation;
 
@@ -263,15 +263,15 @@ class TramMovement {
     // This prevents micro-rotations from GPS noise
     const rotationThreshold = 0.1; // Increased threshold for rotation
     if (Math.abs(rotationDiff) > rotationThreshold && distance >= 0.5) {
-      const rotationDuration = Math.min(1.0, Math.abs(rotationDiff) / this.rotationSpeed);
+      const rotationDuration = Math.min(duration, 1, Math.abs(rotationDiff) / this.rotationSpeed);
       tl.to(this.tram.rotation, {
         duration: rotationDuration,
         y: currentRotation + rotationDiff,
         ease: 'power2.inOut'
-      });
+      }, 0);
     }
 
-    // Move to target after rotation
+    // Move to the target during the same interval
     tl.to(this.tram.position, {
       duration: duration,
       x: currentPosition.x,
@@ -281,7 +281,7 @@ class TramMovement {
       onComplete: () => {
         this.isMoving = false; // Mark as stationary when reached
       }
-    });
+    }, 0);
 
     this.currentTween = tl;
     this.isMoving = true;
