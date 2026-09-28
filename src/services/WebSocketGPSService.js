@@ -42,26 +42,17 @@ class WebSocketGPSService {
   }
   
   getDefaultServerUrl() {
-    // Detect environment and use appropriate server URL
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      
-      if (hostname === 'localhost') {
-        return 'ws://localhost:8080';  // Changed from 3000 to 8080
-      } else {
-        // Production: Use environment variable first
-        const backendUrl = import.meta.env.VITE_BACKEND_URL;
-        if (backendUrl) {
-          return backendUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-        }
-        
-        // DigitalOcean App Platform URLs
-        // Using your actual backend URL
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        return `${protocol}//au-journey-web-backend-gk6n3.ondigitalocean.app`;
-      }
+    if (typeof window === 'undefined') return 'http://localhost:8080';
+
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
+    if (backendUrl) return backendUrl;
+
+    const hostname = window.location.hostname;
+    if (import.meta.env.DEV && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+      return `${window.location.protocol}//${hostname}:8080`;
     }
-    return 'ws://localhost:8080';  // Changed from 3000 to 8080
+
+    return window.location.origin;
   }
   
   connect() {
@@ -72,6 +63,7 @@ class WebSocketGPSService {
     console.log('🔌 Attempting WebSocket connection to:', this.config.serverUrl);
     
     this.socket = io(this.config.serverUrl, {
+      path: `${import.meta.env.BASE_URL}socket.io/`,
       transports: ['websocket', 'polling'],
       upgrade: true,
       rememberUpgrade: true,
@@ -423,4 +415,4 @@ class WebSocketGPSService {
 
 }
 
-export default WebSocketGPSService; 
+export default WebSocketGPSService;

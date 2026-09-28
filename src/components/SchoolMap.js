@@ -35,7 +35,7 @@ class SchoolMap {
     this.renderer = new WebGLRenderer({ antialias: true });
     this.controls = null;
 
-    // Base-aware asset prefix so it works under '/' and '/journey/'
+    // Base-aware asset prefix for local and nested deployments
     this.baseUrl = import.meta.env.BASE_URL || '/';
 
     // Pass baseUrl + renderer to MapManager so it prefixes /models/* correctly
@@ -529,7 +529,7 @@ class SchoolMap {
 
   loadTramFBXModel() {
     const loader = new FBXLoader();
-    // Base-aware FBX URL so it resolves under '/journey/' in prod
+    // Base-aware FBX URL for nested deployments
     const modelPath = `${this.baseUrl}models/tram_1.fbx`;
     loader.load(modelPath, async (object) => {
       this.tram = object;
@@ -590,7 +590,7 @@ class SchoolMap {
 
   loadTram2FBXModel() {
     const loader = new FBXLoader();
-    // Base-aware FBX URL so it resolves under '/journey/' in prod
+    // Base-aware FBX URL for nested deployments
     const modelPath = `${this.baseUrl}models/tram_2.fbx`;
     loader.load(modelPath, async (object) => {
       this.tram2 = object;
